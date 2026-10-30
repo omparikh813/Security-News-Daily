@@ -7,13 +7,14 @@ import logging
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 
 import feedparser
 import trafilatura
 
 from .errors import AllSourcesFailed
 from .models import Article
-from .safety import FetchError, RobotsCache, clean_text, extract_cves, safe_href
+from .safety import FetchError, HTTPStatusError, RobotsCache, clean_text, extract_cves, safe_href
 from .settings import Config, Source
 
 log = logging.getLogger(__name__)
@@ -39,11 +40,19 @@ def _entry_time(entry) -> datetime | None:
     return max(times) if times else None
 
 
-def _article_text(url: str, fetcher, robots: RobotsCache, max_chars: int) -> str | None:
-    if not robots.allowed(url):
+def _article_text(url: str, fetcher, robots: RobotsCache, max_chars: int, refused: set[str]) -> str | None:
+    host = urlsplit(url).hostname or ""
+    if host in refused or not robots.allowed(url):
         return None
     try:
         page = fetcher.get(url)
+    except HTTPStatusError as e:
+        if e.status in (403, 429):  # rate-limited or bot-blocked: leave this site alone for the run
+            refused.add(host)
+            log.warning("%s returned HTTP %d; using feed excerpts for its other articles", host, e.status)
+        else:
+            log.info("article fetch failed, using excerpt: %s", e)
+        return None
     except FetchError as e:
         log.info("article fetch failed, using excerpt: %s", e)
         return None
@@ -55,8 +64,9 @@ def _article_text(url: str, fetcher, robots: RobotsCache, max_chars: int) -> str
     return text or None
 
 
-def collect_source(source: Source, fetcher, robots: RobotsCache, now: datetime, cfg: Config) -> list[Article]:
-    result = fetcher.get(str(source.url))
+def collect_source(source: Source, fetcher, robots: RobotsCache, now: datetime, cfg: Config,
+                   refused: set[str]) -> list[Article]:
+    result = fetcher.get(str(source.url), max_bytes=cfg.collection.max_feed_bytes)
     feed = feedparser.parse(result.content)  # parses bytes only; never fetches by itself
     if not feed.entries:
         raise FetchError(f"no entries ({feed.get('bozo_exception', 'empty feed')})")
@@ -73,7 +83,7 @@ def collect_source(source: Source, fetcher, robots: RobotsCache, now: datetime, 
             log.info("skipping item with unsafe link or no title from %s", source.name)
             continue
         excerpt = clean_text(entry.get("summary"), MAX_EXCERPT_CHARS)
-        text = _article_text(url, fetcher, robots, cfg.collection.max_article_chars)
+        text = _article_text(url, fetcher, robots, cfg.collection.max_article_chars, refused)
         articles.append(Article(
             source=source.name,
             tier=source.tier,
@@ -90,11 +100,12 @@ def collect_source(source: Source, fetcher, robots: RobotsCache, now: datetime, 
 
 def collect(sources: list[Source], fetcher, now: datetime, cfg: Config) -> tuple[list[Article], CollectReport]:
     robots = RobotsCache(fetcher, cfg.collection.user_agent)
+    refused: set[str] = set()
     report = CollectReport()
     articles: list[Article] = []
     for source in sources:
         try:
-            items = collect_source(source, fetcher, robots, now, cfg)
+            items = collect_source(source, fetcher, robots, now, cfg, refused)
         except (FetchError, ValueError) as e:  # FR-3: log and skip
             log.warning("source %s failed: %s", source.name, e)
             report.failed.append(source.name)

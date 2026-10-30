@@ -120,12 +120,16 @@ class OpenRouterClient:
             body = {}
         error = body.get("error") if isinstance(body, dict) else None
         code = error.get("code") if isinstance(error, dict) else None
-        if resp.status_code in (402, 429) or code in (402, 429):  # FR-14: rate limit or quota
-            raise RateLimitStop(f"provider returned {resp.status_code}/{code}")
-        if resp.status_code in (401, 403) or code in (401, 403):
-            raise AIAuthError("provider rejected the API key")
+        message = str(error.get("message", ""))[:200] if isinstance(error, dict) else ""
+        status = code if code in (401, 402, 403, 429) else resp.status_code
+        if status in (402, 429):  # FR-14: rate limit or out of credits
+            raise RateLimitStop(f"provider returned {status}: {message}")
+        if status == 401:
+            raise AIAuthError(f"provider rejected the API key (HTTP 401: {message or 'no details'})")
+        if status == 403:  # OpenRouter: this article was flagged by moderation
+            raise TransientAIError(f"input flagged by provider moderation: {message}")
         if resp.status_code != 200 or error:
-            raise TransientAIError(f"provider error {resp.status_code}")
+            raise TransientAIError(f"provider error {resp.status_code}: {message}")
         try:
             return body["choices"][0]["message"]["content"] or ""
         except (KeyError, IndexError, TypeError) as e:

@@ -70,12 +70,12 @@ def run(max_requests: int | None, out_dir: Path) -> int:
     if not os.environ.get("GITHUB_ACTIONS"):
         from dotenv import load_dotenv  # local runs only; CI uses repository secrets
 
-        load_dotenv(ROOT / ".env", override=False)
+        load_dotenv(ROOT / ".env", override=True)  # .env beats a stale exported key
         setup_logging()  # pick up keys loaded from .env for redaction
 
     # Fail before any network use (FR-11).
     model = resolve_model(os.environ.get("OPENROUTER_MODEL"), cfg.ai)
-    key = os.environ.get("OPENROUTER_API_KEY", "")
+    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if not key:
         raise ConfigError("OPENROUTER_API_KEY is not set")
 

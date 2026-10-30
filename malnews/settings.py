@@ -27,6 +27,7 @@ class CollectionCfg(_Strict):
     retries: int = Field(ge=0, le=5)
     user_agent: str = Field(min_length=5, max_length=200)
     max_redirects: int = Field(ge=0, le=10)
+    max_feed_bytes: int = Field(gt=0, le=50_000_000)
     max_response_bytes: int = Field(gt=0, le=20_000_000)
     max_article_chars: int = Field(gt=0, le=200_000)
 

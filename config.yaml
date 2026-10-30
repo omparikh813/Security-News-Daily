@@ -10,7 +10,8 @@ collection:                      # FR-2, SR-6
   retries: 2
   user_agent: "MalNewsBot/1.0 (+https://github.com/omparikh813/security-news-daily)"
   max_redirects: 5
-  max_response_bytes: 5000000
+  max_feed_bytes: 30000000       # CISA's all.xml is several MB
+  max_response_bytes: 5000000    # articles and robots.txt
   max_article_chars: 20000
 
 dedupe:                          # FR-4

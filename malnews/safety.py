@@ -149,13 +149,13 @@ class SafeFetcher:
         self.session.verify = True
         self.session.headers["User-Agent"] = user_agent
 
-    def get(self, url: str) -> FetchResult:
+    def get(self, url: str, max_bytes: int | None = None) -> FetchResult:
         last: Exception | None = None
         for attempt in range(self.retries + 1):
             if attempt:
                 time.sleep(2 ** (attempt - 1))
             try:
-                return self._get_once(url)
+                return self._get_once(url, max_bytes or self.max_bytes)
             except HTTPStatusError as e:
                 if e.status < 500:
                     raise
@@ -164,7 +164,7 @@ class SafeFetcher:
                 last = e
         raise FetchError(f"giving up on {url[:120]}: {last}")
 
-    def _get_once(self, url: str) -> FetchResult:
+    def _get_once(self, url: str, max_bytes: int) -> FetchResult:
         for _ in range(self.max_redirects + 1):
             check_url(url)
             with self.session.get(url, stream=True, allow_redirects=False, timeout=self.timeout) as resp:
@@ -173,12 +173,12 @@ class SafeFetcher:
                     continue
                 if resp.status_code != 200:
                     raise HTTPStatusError(resp.status_code, url)
-                body = b""
+                body = bytearray()
                 for chunk in resp.iter_content(65536):
                     body += chunk
-                    if len(body) > self.max_bytes:
-                        raise FetchError(f"response larger than {self.max_bytes} bytes")
-                return FetchResult(url, body)
+                    if len(body) > max_bytes:
+                        raise FetchError(f"response larger than {max_bytes} bytes")
+                return FetchResult(url, bytes(body))
         raise FetchError(f"more than {self.max_redirects} redirects")
 
 

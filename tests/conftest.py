@@ -58,12 +58,15 @@ def rss(*items: tuple[str, str, datetime, str]) -> bytes:
 class FakeFetcher:
     """Serves bytes by URL; anything else is a 404, like a missing page."""
 
-    def __init__(self, pages: dict[str, bytes]):
-        self.pages = pages
+    def __init__(self, pages: dict[str, bytes | int]):
+        self.pages = pages  # bytes = content, int = HTTP error status
         self.requested: list[str] = []
+        self.caps: dict[str, int | None] = {}
 
-    def get(self, url: str) -> FetchResult:
+    def get(self, url: str, max_bytes: int | None = None) -> FetchResult:
         self.requested.append(url)
-        if url not in self.pages:
-            raise HTTPStatusError(404, url)
-        return FetchResult(url, self.pages[url])
+        self.caps[url] = max_bytes
+        page = self.pages.get(url, 404)
+        if isinstance(page, int):
+            raise HTTPStatusError(page, url)
+        return FetchResult(url, page)

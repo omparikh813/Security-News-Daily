@@ -10,7 +10,9 @@ from malnews.collect import collect
 from malnews.errors import AIAuthError, AllSourcesFailed, BudgetExceeded, ConfigError, RateLimitStop
 from malnews.models import Story
 from malnews.rank import dedupe, rank
-from malnews.summarize import OpenRouterClient, Summarizer, excerpt_of, parse_summary, resolve_model
+from malnews.summarize import (
+    OpenRouterClient, Summarizer, TransientAIError, excerpt_of, parse_summary, resolve_model,
+)
 
 from .conftest import NOW, FakeFetcher, make_article, rss
 
@@ -41,6 +43,24 @@ def test_collect(cfg, sources, no_network):
     assert not by_title["Vendor flaw CVE-2026-1111 exploited"].text_is_excerpt
     assert by_title["Ransomware hits hospital"].text_is_excerpt  # article 404 -> feed excerpt
     assert by_title["Ransomware hits hospital"].url == "https://www.bleepingcomputer.com/b"
+
+
+def test_feeds_get_the_larger_cap(cfg, sources, no_network):
+    fetcher = FakeFetcher({CISA: rss(("A story title here", "https://www.cisa.gov/a", NOW, "x"))})
+    collect(sources, fetcher, NOW, cfg)
+    assert fetcher.caps[CISA] == cfg.collection.max_feed_bytes
+    assert fetcher.caps["https://www.cisa.gov/a"] is None  # articles use the default 5 MB cap
+
+
+def test_site_that_rate_limits_is_left_alone(cfg, sources, no_network):
+    items = [(f"Story number {i} headline", f"https://www.bleepingcomputer.com/{i}", NOW - timedelta(hours=1), "Ex.")
+             for i in range(4)]
+    pages = {BC: rss(*items), "https://www.bleepingcomputer.com/0": 429}
+    fetcher = FakeFetcher(pages)
+    articles, _ = collect(sources, fetcher, NOW, cfg)
+    assert len(articles) == 4 and all(a.text_is_excerpt for a in articles)
+    article_hits = [u for u in fetcher.requested if u.startswith("https://www.bleepingcomputer.com/") and u[-1].isdigit()]
+    assert article_hits == ["https://www.bleepingcomputer.com/0"]  # stopped after the first 429
 
 
 def test_all_sources_failed(cfg, sources, no_network):
@@ -169,11 +189,20 @@ class FakeHTTP:
     (429, {}, RateLimitStop),
     (402, {}, RateLimitStop),
     (200, {"error": {"code": 429, "message": "rate limited"}}, RateLimitStop),
-    (401, {}, AIAuthError),
+    (401, {"error": {"code": 401, "message": "User not found."}}, AIAuthError),
+    (403, {"error": {"code": 403, "message": "Input flagged"}}, TransientAIError),
+    (500, {}, TransientAIError),
 ])
 def test_openrouter_errors(cfg, status, body, exc):
     client = OpenRouterClient(api_key="sk-or-test-000000", model="m", cfg=cfg.ai, session=FakeHTTP(status, body))
     with pytest.raises(exc):
+        client.complete("s", "u")
+
+
+def test_auth_error_explains_itself(cfg):
+    body = {"error": {"code": 401, "message": "User not found."}}
+    client = OpenRouterClient(api_key="sk-or-test-000000", model="m", cfg=cfg.ai, session=FakeHTTP(401, body))
+    with pytest.raises(AIAuthError, match="User not found"):
         client.complete("s", "u")
 
 
