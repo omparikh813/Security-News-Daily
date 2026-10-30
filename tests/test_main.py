@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import subprocess
 from datetime import datetime, timedelta, timezone
 
@@ -88,9 +89,13 @@ def test_dotenv_is_git_ignored():
     assert out.stdout.strip() == ".env"
 
 
-def test_no_key_like_strings_committed():
+# Real OpenRouter keys are "sk-or-v1-" plus 64 hex characters. The fake KEY above does not match.
+REAL_KEY_RE = re.compile(r"sk-or-v1-[0-9a-f]{64}")
+
+
+def test_no_real_keys_committed():
     files = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True).stdout.split()
     for name in files:
         path = ROOT / name
         if path.is_file() and path.suffix not in (".ttf", ".pdf"):
-            assert "sk-or-v1-" not in path.read_text(errors="ignore").replace(KEY, ""), name
+            assert not REAL_KEY_RE.search(path.read_text(errors="ignore")), name
