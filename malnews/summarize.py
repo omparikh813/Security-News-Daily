@@ -1,7 +1,8 @@
-"""Stage 4: AI summaries through OpenRouter (FR-11 to FR-14, SR-1)."""
+"""Stage 4: AI summaries through OpenRouter (FR-11 to FR-14)."""
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
@@ -11,7 +12,6 @@ import requests
 
 from .errors import AIAuthError, BudgetExceeded, ConfigError, RateLimitStop
 from .models import Story, Summary
-from .safety import InvalidOutput, strip_urls, validate_ai_output
 from .settings import AICfg
 
 log = logging.getLogger(__name__)
@@ -41,17 +41,36 @@ def resolve_model(env_value: str | None, cfg: AICfg) -> str:
     return model
 
 
-def build_user_message(title: str, text: str, max_chars: int) -> tuple[str, str]:
-    """Return (message, source_text). Delimiters inside the article are removed."""
+def build_user_message(title: str, text: str, max_chars: int) -> str:
+    """The article goes in as delimited data; delimiters inside it are removed."""
     source = _DELIM_RE.sub(" ", f"{title}\n\n{text}")[:max_chars]
-    return f"<article>\n{source}\n</article>", source
+    return f"<article>\n{source}\n</article>"
 
 
 def excerpt_of(text: str, max_chars: int = 400) -> str:
-    """FR-12 fallback: the article's first two sentences, links removed."""
-    sentences = _SENTENCE_RE.split(text.strip())
-    out = strip_urls(" ".join(sentences[:2]))
+    """FR-12 fallback: the article's first two sentences."""
+    out = " ".join(_SENTENCE_RE.split(text.strip())[:2])
     return out if len(out) <= max_chars else out[: max_chars - 1].rsplit(" ", 1)[0] + "…"
+
+
+class InvalidOutput(ValueError):
+    pass
+
+
+def parse_summary(raw: str) -> tuple[str, str | None]:
+    """FR-12 tolerant parsing: strip code fences, take the first JSON object with a summary."""
+    text = re.sub(r"```(?:json)?", "", raw or "", flags=re.I)
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\{", text):
+        try:
+            obj, _ = decoder.raw_decode(text, match.start())
+        except json.JSONDecodeError:
+            continue
+        summary, mitigation = (obj.get("summary"), obj.get("mitigation")) if isinstance(obj, dict) else (None, None)
+        if isinstance(summary, str) and summary.strip():
+            mitigation = mitigation.strip() if isinstance(mitigation, str) else None
+            return summary.strip(), mitigation if mitigation and mitigation.lower() != "null" else None
+    raise InvalidOutput("no JSON object with a summary")
 
 
 class TransientAIError(Exception):
@@ -119,7 +138,7 @@ class SummaryStats:
     valid_first: int = 0
     valid_retry: int = 0
     excerpts: int = 0  # the model was asked and failed twice
-    skipped: int = 0  # no request made (--no-ai or --max-requests reached)
+    skipped: int = 0  # no request made (--max-requests reached)
 
     @property
     def json_valid_rate(self) -> float | None:
@@ -136,7 +155,6 @@ class Summarizer:
         self.hard_cap = cfg.max_requests_per_run
         self.soft_cap = min(max_requests or self.hard_cap, self.hard_cap)
         self.stats = SummaryStats()
-        self.fields = {"summary": (cfg.max_summary_chars, False), "mitigation": (cfg.max_mitigation_chars, True)}
 
     def _spend(self) -> bool:
         if self.stats.requests >= self.hard_cap:
@@ -148,24 +166,23 @@ class Summarizer:
 
     def summarize(self, story: Story) -> Summary:
         article = story.primary
-        user, source = build_user_message(article.title, article.text, self.cfg.max_input_chars)
+        user = build_user_message(article.title, article.text, self.cfg.max_input_chars)
         asked = False
-        if self.client is not None:
-            for attempt in range(2):
-                if not self._spend():
-                    break
-                asked = True
-                try:
-                    raw = self.client.complete(SYSTEM_PROMPT, user)
-                    data = validate_ai_output(raw, source, self.fields)
-                except (TransientAIError, InvalidOutput) as e:
-                    log.info("summary attempt %d rejected for %s: %s", attempt + 1, article.url, e)
-                    continue
-                if attempt == 0:
-                    self.stats.valid_first += 1
-                else:
-                    self.stats.valid_retry += 1
-                return Summary(data["summary"], data["mitigation"], is_excerpt=False)
+        for attempt in range(2):
+            if not self._spend():
+                break
+            asked = True
+            try:
+                raw = self.client.complete(SYSTEM_PROMPT, user)
+                summary, mitigation = parse_summary(raw)
+            except (TransientAIError, InvalidOutput) as e:
+                log.info("summary attempt %d rejected for %s: %s", attempt + 1, article.url, e)
+                continue
+            if attempt == 0:
+                self.stats.valid_first += 1
+            else:
+                self.stats.valid_retry += 1
+            return Summary(summary, mitigation, is_excerpt=False)
         if asked:
             self.stats.excerpts += 1
         else:

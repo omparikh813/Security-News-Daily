@@ -13,8 +13,8 @@
 <p>A five-minute daily security briefing. <a href="latest.pdf">Read today’s edition</a>.</p>
 <h2>Editions</h2>
 <ul>
-{% for e in editions %}
-  <li><a href="{{ e.href }}">{{ e.day }}</a><br><code>SHA-256 {{ e.sha256 }}</code></li>
+{% for day in days %}
+  <li><a href="archive/{{ day }}.pdf">{{ day }}</a></li>
 {% endfor %}
 </ul>
 </body>

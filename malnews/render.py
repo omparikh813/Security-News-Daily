@@ -48,7 +48,7 @@ def _story_view(s: Story) -> dict:
         "summary": s.summary.summary if s.summary else "",
         "mitigation": s.summary.mitigation if s.summary else None,
         "is_excerpt": bool(s.summary and s.summary.is_excerpt),
-        # Links come only from feed metadata, re-checked here (SR-1, SR-2).
+        # Links come only from feed metadata, re-checked here (SR-2).
         "links": [(p, h) for p, u in s.links if (h := safe_href(u))],
     }
 

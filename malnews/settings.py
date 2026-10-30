@@ -27,8 +27,7 @@ class CollectionCfg(_Strict):
     retries: int = Field(ge=0, le=5)
     user_agent: str = Field(min_length=5, max_length=200)
     max_redirects: int = Field(ge=0, le=10)
-    max_text_bytes: int = Field(gt=0, le=20_000_000)
-    max_image_bytes: int = Field(gt=0, le=20_000_000)
+    max_response_bytes: int = Field(gt=0, le=20_000_000)
     max_article_chars: int = Field(gt=0, le=200_000)
 
 
@@ -62,8 +61,6 @@ class AICfg(_Strict):
     max_requests_per_run: int = Field(gt=0, le=1000)
     max_input_chars: int = Field(gt=0, le=50_000)
     max_output_tokens: int = Field(gt=0, le=4000)
-    max_summary_chars: int = Field(gt=0, le=2000)
-    max_mitigation_chars: int = Field(gt=0, le=2000)
 
     @field_validator("endpoint")
     @classmethod

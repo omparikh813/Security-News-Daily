@@ -1,8 +1,9 @@
 """MalNews: collect -> rank -> summarize -> render -> publish.
 
-  python main.py --dry-run            fixtures only, no network or AI (T2) -> site/
-  python main.py --max-requests 10    real feeds and model, keys from .env (T3) -> out/
-  python main.py --no-ai              real feeds, excerpts instead of summaries -> out/
+  python main.py                     full run -> site/
+  python main.py --max-requests 10   cap AI requests for a test run (T3)
+
+Keys come from the environment (GitHub secrets in CI, a git-ignored .env locally).
 """
 
 from __future__ import annotations
@@ -16,7 +17,6 @@ from pathlib import Path
 
 from malnews.collect import collect
 from malnews.errors import ConfigError, MalNewsError
-from malnews.fixtures import FixtureAIClient, load_fixtures
 from malnews.publish import write_site
 from malnews.rank import rank
 from malnews.render import build_edition, render_pdf
@@ -30,7 +30,7 @@ log = logging.getLogger("malnews")
 
 
 class RedactSecrets(logging.Filter):
-    """SR-5 defense in depth: never let a key value reach a log line."""
+    """SR-5: never let a key value reach a log line, even inside an exception message."""
 
     def __init__(self):
         super().__init__()
@@ -51,18 +51,7 @@ def setup_logging() -> None:
     handler.addFilter(RedactSecrets())
     logging.basicConfig(level=logging.INFO, handlers=[handler], force=True)
     for noisy in ("urllib3", "trafilatura", "fontTools", "weasyprint"):
-        logging.getLogger(noisy).setLevel(logging.WARNING)
-
-
-def parse_args(argv: list[str] | None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Build the MalNews daily edition.")
-    p.add_argument("--dry-run", action="store_true", help="use fixtures/, no network or AI")
-    p.add_argument("--max-requests", type=int, default=None, help="cap AI requests for this run")
-    p.add_argument("--no-ai", action="store_true", help="skip the model; print excerpts")
-    p.add_argument("--out", type=Path, default=None, help="output folder")
-    p.add_argument("--fixtures", type=Path, default=ROOT / "fixtures")
-    p.add_argument("--force-429", action="store_true", help="dry run only: simulate a 429 (FR-14 test)")
-    return p.parse_args(argv)
+        logging.getLogger(noisy).setLevel(logging.ERROR)
 
 
 def write_job_summary(lines: list[str]) -> None:
@@ -75,45 +64,29 @@ def write_job_summary(lines: list[str]) -> None:
     print(text)
 
 
-def run(args: argparse.Namespace) -> int:
+def run(max_requests: int | None, out_dir: Path) -> int:
     cfg = load_config(ROOT / "config.yaml")
     sources = load_sources(ROOT / "sources.yaml")
-    if args.force_429 and not args.dry_run:
-        raise ConfigError("--force-429 only works with --dry-run")
-    if args.max_requests is not None and args.max_requests < 0:
-        raise ConfigError("--max-requests must be 0 or more")
+    if not os.environ.get("GITHUB_ACTIONS"):
+        from dotenv import load_dotenv  # local runs only; CI uses repository secrets
 
-    if args.dry_run:
-        now, fetcher, ai_fixtures = load_fixtures(args.fixtures)
-        client = None if args.no_ai else FixtureAIClient(ai_fixtures, force_429=args.force_429)
-        model = "fixtures"
-        out_dir = args.out or ROOT / "site"
-    else:
-        if not os.environ.get("GITHUB_ACTIONS"):
-            from dotenv import load_dotenv  # local runs only; CI uses repository secrets
+        load_dotenv(ROOT / ".env", override=False)
+        setup_logging()  # pick up keys loaded from .env for redaction
 
-            load_dotenv(ROOT / ".env", override=False)
-        model = resolve_model(os.environ.get("OPENROUTER_MODEL"), cfg.ai)  # FR-11, before any network
-        client = None
-        if not args.no_ai:
-            key = os.environ.get("OPENROUTER_API_KEY", "")
-            if not key:
-                raise ConfigError("OPENROUTER_API_KEY is not set (use --no-ai to run without it)")
-            client = OpenRouterClient(api_key=key, model=model, cfg=cfg.ai)
-        c = cfg.collection
-        fetcher = SafeFetcher(
-            user_agent=c.user_agent, timeout=c.timeout_seconds, retries=c.retries,
-            max_redirects=c.max_redirects,
-            max_bytes={"feed": c.max_text_bytes, "html": c.max_text_bytes,
-                       "robots": 512_000, "image": c.max_image_bytes},
-            allow_env_proxy=os.environ.get("MALNEWS_ALLOW_PROXY") == "1",
-        )
-        now = datetime.now(timezone.utc)
-        out_dir = args.out or ROOT / "out"
+    # Fail before any network use (FR-11).
+    model = resolve_model(os.environ.get("OPENROUTER_MODEL"), cfg.ai)
+    key = os.environ.get("OPENROUTER_API_KEY", "")
+    if not key:
+        raise ConfigError("OPENROUTER_API_KEY is not set")
+
+    c = cfg.collection
+    fetcher = SafeFetcher(user_agent=c.user_agent, timeout=c.timeout_seconds, retries=c.retries,
+                          max_redirects=c.max_redirects, max_bytes=c.max_response_bytes)
+    now = datetime.now(timezone.utc)
 
     articles, report = collect(sources, fetcher, now, cfg)
     stories = rank(articles, cfg)
-    summarizer = Summarizer(client, cfg.ai, max_requests=args.max_requests)
+    summarizer = Summarizer(OpenRouterClient(api_key=key, model=model, cfg=cfg.ai), cfg.ai, max_requests)
     summarizer.summarize_all(stories)
 
     edition = build_edition(stories, cfg, now, [s.name for s in sources])
@@ -122,7 +95,7 @@ def run(args: argparse.Namespace) -> int:
         log.warning("renderer blocked %d resource request(s)", len(result.blocked))
 
     day = now.astimezone(timezone(timedelta(hours=cfg.edition.utc_offset_hours))).date().isoformat()
-    write_site(result.pdf, out_dir, day)
+    write_site(result.pdf, out_dir, day)  # only reached when every step succeeded
 
     st = summarizer.stats
     rate = st.json_valid_rate
@@ -136,15 +109,20 @@ def run(args: argparse.Namespace) -> int:
         f"- Valid JSON: {st.valid_first} first try, {st.valid_retry} after retry, "
         f"{st.excerpts} excerpt fallbacks, {st.skipped} not sent"
         + (f" ({rate:.0%} valid)" if rate is not None else ""),
-        f"- Words: {edition.words}; PDF: {len(result.pdf) / 1024:.0f} KB -> {out_dir}",
+        f"- Words: {edition.words}; PDF: {len(result.pdf) / 1024:.0f} KB",
     ])
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, out_dir: Path = ROOT / "site") -> int:
+    p = argparse.ArgumentParser(description="Build the MalNews daily edition.")
+    p.add_argument("--max-requests", type=int, default=None, help="cap AI requests for this run")
+    args = p.parse_args(argv)
     setup_logging()
     try:
-        return run(parse_args(argv))
+        if args.max_requests is not None and args.max_requests < 0:
+            raise ConfigError("--max-requests must be 0 or more")
+        return run(args.max_requests, out_dir)
     except MalNewsError as e:
         log.error("%s: %s (nothing published)", type(e).__name__, e)
         return e.exit_code

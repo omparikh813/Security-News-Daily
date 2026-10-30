@@ -11,14 +11,14 @@ Please use GitHub's **private vulnerability reporting** ("Security" tab ->
 7 days.
 
 In scope: anything that could leak the API keys, let content from a feed or
-the AI model run code, read files, make network requests, or place links in
-the published PDF, and weaknesses in the GitHub Actions workflows.
+the AI model run code, read files, or make network requests, and weaknesses
+in the GitHub Actions workflows.
 
 ## Design
 
-The threat model and security requirements (SR-1 to SR-9) are in
-[`docs/prd/`](docs/prd/). Controls live in `malnews/safety.py`; attack tests
-live in `tests/test_t6_adversarial.py` and `tests/test_safety.py`.
+The threat model and security requirements are in [`docs/prd/`](docs/prd/).
+Controls live in `malnews/safety.py` and `main.py`; attack tests live in
+`tests/test_t6_adversarial.py`, `tests/test_safety.py`, and `tests/test_main.py`.
 
 ## If a key leaks
 

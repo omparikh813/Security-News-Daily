@@ -43,7 +43,7 @@ def _article_text(url: str, fetcher, robots: RobotsCache, max_chars: int) -> str
     if not robots.allowed(url):
         return None
     try:
-        page = fetcher.get(url, "html")
+        page = fetcher.get(url)
     except FetchError as e:
         log.info("article fetch failed, using excerpt: %s", e)
         return None
@@ -56,7 +56,7 @@ def _article_text(url: str, fetcher, robots: RobotsCache, max_chars: int) -> str
 
 
 def collect_source(source: Source, fetcher, robots: RobotsCache, now: datetime, cfg: Config) -> list[Article]:
-    result = fetcher.get(str(source.url), "feed")
+    result = fetcher.get(str(source.url))
     feed = feedparser.parse(result.content)  # parses bytes only; never fetches by itself
     if not feed.entries:
         raise FetchError(f"no entries ({feed.get('bozo_exception', 'empty feed')})")

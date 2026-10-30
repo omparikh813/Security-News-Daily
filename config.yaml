@@ -10,8 +10,7 @@ collection:                      # FR-2, SR-6
   retries: 2
   user_agent: "MalNewsBot/1.0 (+https://github.com/omparikh813/security-news-daily)"
   max_redirects: 5
-  max_text_bytes: 5000000
-  max_image_bytes: 10000000
+  max_response_bytes: 5000000
   max_article_chars: 20000
 
 dedupe:                          # FR-4
@@ -37,7 +36,7 @@ priority:                        # FR-5 (used from Phase 2)
   epss: 0.35
   kev: 0.30
 
-ai:                              # FR-11 to FR-14, SR-1
+ai:                              # FR-11 to FR-14
   # Model slugs and prices must be re-verified on openrouter.ai/models (PRD v2.8, fix 3).
   default_model: nvidia/nemotron-3.5-lightning:free
   allowed_models:
@@ -49,8 +48,6 @@ ai:                              # FR-11 to FR-14, SR-1
   max_requests_per_run: 150
   max_input_chars: 6000
   max_output_tokens: 400
-  max_summary_chars: 600
-  max_mitigation_chars: 300
 
 layout:                          # FR-17
   max_words: 1150

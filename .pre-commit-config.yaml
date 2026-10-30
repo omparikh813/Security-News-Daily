@@ -1,6 +1,0 @@
-# SR-5: block secrets before they reach a commit. Install with: pip install pre-commit && pre-commit install
-repos:
-  - repo: https://github.com/gitleaks/gitleaks
-    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # v8.30.1
-    hooks:
-      - id: gitleaks

@@ -1,4 +1,4 @@
-# Phase 1 CI: tests, dry run, dependency audit, secret scan (SR-3, SR-4, SR-5, T2, T6).
+# CI: tests, dependency audit, secret scan (SR-3, SR-4, SR-5, T1, T6).
 # Every action is pinned to a full commit SHA; Dependabot keeps the pins current.
 name: ci
 
@@ -36,21 +36,11 @@ jobs:
       - name: Install hash-locked dependencies
         run: pip install --require-hashes -r requirements.txt -r requirements-dev.txt
 
-      - name: Unit and adversarial tests (T1, T6)
+      - name: Unit and attack tests (T1, T6)
         run: python -m pytest -q
-
-      - name: Dry run on fixtures (T2)
-        run: python main.py --dry-run
 
       - name: Audit dependencies for known vulnerabilities
         run: pip-audit --strict --require-hashes --disable-pip -r requirements.txt
-
-      - name: Upload dry-run edition
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: dry-run-site
-          path: site/
-          retention-days: 7
 
   secrets:
     runs-on: ubuntu-24.04
