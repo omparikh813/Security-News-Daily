@@ -1,0 +1,40 @@
+# Fictional fixtures for --dry-run and tests. No real vendors, CVEs, or articles.
+now: '2026-10-30T14:00:00Z'
+ai: ai_responses.yaml
+responses:
+  https://www.cisa.gov/news-events/alerts/2026/10/30/cisa-adds-northwind-vpn-flaw-kev:
+    file: articles/cisa-adds-northwind-vpn-flaw-kev.html
+    type: text/html; charset=utf-8
+  https://www.cisa.gov/news-events/ics-advisories/icsa-26-302-01:
+    file: articles/icsa-26-302-01.html
+    type: text/html; charset=utf-8
+  https://www.cisa.gov/cybersecurity-advisories/all.xml:
+    file: feeds/cisa.xml
+    type: application/rss+xml
+  https://www.bleepingcomputer.com/news/security/hackers-exploit-critical-northwind-vpn-flaw/:
+    file: articles/hackers-exploit-critical-northwind-vpn-flaw.html
+    type: text/html; charset=utf-8
+  https://www.bleepingcomputer.com/news/security/lakeshore-health-ransomware-attack-disrupts-hospitals/:
+    file: articles/lakeshore-health-ransomware-attack-disrupts-hospitals.html
+    type: text/html; charset=utf-8
+  https://www.bleepingcomputer.com/feed/:
+    file: feeds/bleepingcomputer.xml
+    type: application/rss+xml
+  https://thehackernews.com/2026/10/malicious-npm-packages-supply-chain.html:
+    file: articles/malicious-npm-packages-supply-chain.html
+    type: text/html; charset=utf-8
+  https://thehackernews.com/2026/10/contoso-mail-server-cve-2026-90033.html:
+    file: articles/contoso-mail-server-cve-2026-90033.html
+    type: text/html; charset=utf-8
+  https://feeds.feedburner.com/TheHackersNews:
+    file: feeds/thehackernews.xml
+    type: application/rss+xml
+  https://krebsonsecurity.com/2026/10/data-broker-tailspin-exposed-records/:
+    file: articles/data-broker-tailspin-exposed-records.html
+    type: text/html; charset=utf-8
+  https://krebsonsecurity.com/feed/:
+    file: feeds/krebs.xml
+    type: application/rss+xml
+  https://feeds.feedburner.com/securityweek:
+    file: feeds/securityweek.xml
+    type: application/rss+xml

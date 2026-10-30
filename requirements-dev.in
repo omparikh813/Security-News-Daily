@@ -1,0 +1,6 @@
+# Test and audit tools. Compile with:
+#   uv pip compile --generate-hashes --python-version 3.12 -o requirements-dev.txt requirements-dev.in
+-c requirements.txt
+pytest>=8.3
+pypdf>=5.0
+pip-audit>=2.7

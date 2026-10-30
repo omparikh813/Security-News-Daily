@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+    <title>BleepingComputer (FIXTURE, fictional)</title>
+    <link>https://www.bleepingcomputer.com/feed/</link>
+    <description>Fictional fixture feed for MalNews tests.</description>
+    <item>
+      <title>Hackers exploit critical Northwind VPN flaw to breach corporate networks</title>
+      <link>https://www.bleepingcomputer.com/news/security/hackers-exploit-critical-northwind-vpn-flaw/</link>
+      <pubDate>Fri, 30 Oct 2026 09:00:00 +0000</pubDate>
+      <description>&lt;p&gt;Threat actors are exploiting CVE-2026-90011 in Northwind VPN Gateway appliances to breach corporate networks.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Lakeshore Health ransomware attack disrupts hospital systems across three states</title>
+      <link>https://www.bleepingcomputer.com/news/security/lakeshore-health-ransomware-attack-disrupts-hospitals/</link>
+      <pubDate>Fri, 30 Oct 2026 11:30:00 +0000</pubDate>
+      <description>&lt;p&gt;A ransomware attack on Lakeshore Health has forced hospitals in three states to divert ambulances.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>New phishing campaign abuses calendar invites to steal cloud office logins</title>
+      <link>https://www.bleepingcomputer.com/news/security/phishing-campaign-abuses-calendar-invites/</link>
+      <pubDate>Thu, 29 Oct 2026 20:00:00 +0000</pubDate>
+      <description>&lt;p&gt;A phishing campaign is sending fake meeting invites that lead to credential-harvesting pages. The invites are accepted automatically by some calendar apps, so victims see them without opening an email. Researchers counted more than 300 targeted companies.&lt;/p&gt;</description>
+    </item>
+</channel></rss>

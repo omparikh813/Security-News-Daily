@@ -1,0 +1,37 @@
+# Recorded-style model responses for --dry-run, keyed by the title of the article sent
+# to the model. Lists are replayed in order. Fictional content. Several entries are
+# deliberately messy to exercise tolerant parsing (FR-12) and SR-1 validation.
+
+"CISA Adds Northwind VPN Flaw to Known Exploited Vulnerabilities Catalog":
+  - |
+    ```json
+    {"summary": "CISA added CVE-2026-90011, an authentication bypass in the Northwind VPN Gateway management interface, to its Known Exploited Vulnerabilities Catalog after evidence of active exploitation. Federal civilian agencies must remediate it by the directive's due date.", "mitigation": "Upgrade Northwind VPN Gateway to version 8.4.2 or later and limit the management interface to trusted networks."}
+    ```
+
+"Fabrikam SCADA Gateway Vulnerability Actively Exploited (CVE-2026-90021)":
+  - |
+    Here is the summary you asked for:
+    {"summary": "Attackers exploited CVE-2026-90021, a remote code execution flaw in Fabrikam's SG-500 SCADA gateway, before a patch existed. The gateway runs in water, wastewater, and energy facilities, and exploitation lets an unauthenticated attacker run commands and alter process data.", "mitigation": "Install firmware 3.2.1, and until then isolate the gateways from the internet behind firewalls."}
+
+# First answer is rejected (contains a URL), the retry is accepted.
+"Lakeshore Health ransomware attack disrupts hospital systems across three states":
+  - '{"summary": "Read more at https://example.com/lakeshore for details.", "mitigation": null}'
+  - '{"summary": "A ransomware attack on the Lakeshore Health hospital network disrupted electronic health records and forced emergency departments in three states to divert ambulances. The company took systems offline and is working with incident responders and law enforcement.", "mitigation": null}'
+
+"Malicious npm Packages Target Developers in New Supply Chain Attack":
+  - '{"summary": "Researchers found 14 malicious npm packages posing as popular logging libraries. A post-install script steals cloud credentials, SSH keys, and CI tokens from developer machines.", "mitigation": "Rotate every token and key on affected machines and audit lockfiles for the packages, which have been removed from the registry."}'
+
+"Contoso Mail Server Update Fixes Critical Flaw CVE-2026-90033":
+  - '{"summary": "Contoso patched CVE-2026-90033, a critical deserialization flaw in Contoso Mail Server that allows remote code execution without authentication when web mail is exposed. No exploitation has been seen so far.", "mitigation": "Install cumulative update 14, or disable the legacy web mail endpoint until you can patch."}'
+
+"Data Broker Tailspin Exposed Records of 40 Million People":
+  - '{"summary": "Data broker Tailspin left a database of roughly 40 million names, addresses, and phone numbers open to the internet without a password. It was secured two days after a researcher reported it, and the exposure period is unknown.", "mitigation": null}'
+
+"Northwind Cloud Outage Blamed on Faulty Configuration Update":
+  - '{"summary": "A six-hour Northwind Cloud outage in two regions was caused by a faulty configuration update, not a cyberattack. Customers lost access to storage and virtual machines.", "mitigation": null}'
+
+"Email Security Startup Raises $40 Million in Series B Funding":
+  - '{"summary": "An email security startup raised $40 million in Series B funding to expand its detection platform and double its engineering team.", "mitigation": null}'
+
+# "New phishing campaign abuses calendar invites..." has no recorded response on purpose:
+# both attempts fail and the PDF prints an excerpt (FR-12 fallback).

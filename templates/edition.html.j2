@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MalNews | {{ date_long }}</title>
+<link rel="stylesheet" href="edition.css">
+</head>
+<body>
+
+<header class="masthead">
+  <h1>MalNews</h1>
+  <div class="meta">
+    <span>{{ date_long }}</span>
+    <span>Edition {{ edition }}</span>
+    <span>{{ read_minutes }} min read</span>
+    <span>Generated {{ generated }}</span>
+  </div>
+</header>
+
+{% macro story(s, lead=False) %}
+<article class="story{% if lead %} lead{% endif %}">
+  <h3>{{ s.title }}</h3>
+  <p>{% if s.is_excerpt %}<span class="tag">Excerpt</span> {% endif %}{{ s.summary }}</p>
+  {% if s.mitigation %}<p class="fix"><b>Fix:</b> {{ s.mitigation }}</p>{% endif %}
+  <p class="links">
+    {% for publisher, href in s.links %}<a href="{{ href }}">{{ publisher }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
+</article>
+{% endmacro %}
+
+<section>
+  <h2>News of the Day</h2>
+  {% for s in news_of_the_day %}{{ story(s, lead=True) }}{% endfor %}
+</section>
+
+{% if headlines %}
+<section>
+  <h2>Other Headlines</h2>
+  {% for s in headlines %}{{ story(s) }}{% endfor %}
+</section>
+{% endif %}
+
+<footer>
+  <p><b>Sources:</b> {{ sources | join(", ") }}.</p>
+  <p>Summaries are AI-written from the linked articles. Items marked “Excerpt” quote the article directly.
+  Severity scores come from NVD.</p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+    <title>The Hacker News (FIXTURE, fictional)</title>
+    <link>https://feeds.feedburner.com/TheHackersNews</link>
+    <description>Fictional fixture feed for MalNews tests.</description>
+    <item>
+      <title>Northwind VPN Zero-Day CVE-2026-90011 Under Active Attack, Patch Now</title>
+      <link>https://thehackernews.com/2026/10/northwind-vpn-zero-day.html?utm_source=feed</link>
+      <pubDate>Fri, 30 Oct 2026 07:00:00 +0000</pubDate>
+      <description>&lt;p&gt;Northwind warns that CVE-2026-90011 was exploited as a zero-day before a fix was released.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Malicious npm Packages Target Developers in New Supply Chain Attack</title>
+      <link>https://thehackernews.com/2026/10/malicious-npm-packages-supply-chain.html</link>
+      <pubDate>Fri, 30 Oct 2026 05:00:00 +0000</pubDate>
+      <description>&lt;p&gt;Researchers found 14 npm packages that steal developer tokens.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Contoso Mail Server Update Fixes Critical Flaw CVE-2026-90033</title>
+      <link>https://thehackernews.com/2026/10/contoso-mail-server-cve-2026-90033.html</link>
+      <pubDate>Thu, 29 Oct 2026 16:00:00 +0000</pubDate>
+      <description>&lt;p&gt;Contoso has patched a critical deserialization flaw in Contoso Mail Server.&lt;/p&gt;</description>
+    </item>
+</channel></rss>

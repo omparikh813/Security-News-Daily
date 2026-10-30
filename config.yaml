@@ -1,0 +1,57 @@
+# MalNews configuration. Validated against a strict schema on load (malnews/settings.py).
+
+edition:
+  launch_date: 2026-11-01        # edition 1
+  utc_offset_hours: -8           # PST, fixed (FR-15)
+
+collection:                      # FR-2, SR-6
+  window_hours: 24
+  timeout_seconds: 15
+  retries: 2
+  user_agent: "MalNewsBot/1.0 (+https://github.com/omparikh813/security-news-daily)"
+  max_redirects: 5
+  max_text_bytes: 5000000
+  max_image_bytes: 10000000
+  max_article_chars: 20000
+
+dedupe:                          # FR-4
+  title_similarity: 85
+  min_title_tokens: 4            # short titles never merge on similarity alone
+
+ranking:                         # FR-6
+  publisher_weight: 0.4
+  priority_weight: 0.4
+  impact_weight: 0.2
+  publisher_cap: 5
+  official_multiplier: 2
+  news_of_the_day: 3
+  impact_keywords:
+    - outage
+    - ransomware
+    - breach
+    - supply chain
+    - critical infrastructure
+
+priority:                        # FR-5 (used from Phase 2)
+  cvss: 0.35
+  epss: 0.35
+  kev: 0.30
+
+ai:                              # FR-11 to FR-14, SR-1
+  # Model slugs and prices must be re-verified on openrouter.ai/models (PRD v2.8, fix 3).
+  default_model: nvidia/nemotron-3.5-lightning:free
+  allowed_models:
+    - nvidia/nemotron-3.5-lightning:free
+    - anthropic/claude-haiku-5.5
+  endpoint: https://openrouter.ai/api/v1/chat/completions
+  timeout_seconds: 60
+  requests_per_minute: 20
+  max_requests_per_run: 150
+  max_input_chars: 6000
+  max_output_tokens: 400
+  max_summary_chars: 600
+  max_mitigation_chars: 300
+
+layout:                          # FR-17
+  max_words: 1150
+  words_per_minute: 230

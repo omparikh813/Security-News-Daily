@@ -1,0 +1,24 @@
+# News sources (FR-1). tier: official sources count double in story scoring (FR-6).
+# NVD, CISA KEV, and FIRST EPSS are data APIs (Phase 2), not news sources.
+# Feed URLs must be re-verified against the live sites (PRD v2.8, fix 3).
+sources:
+  - name: CISA
+    url: https://www.cisa.gov/cybersecurity-advisories/all.xml
+    type: rss
+    tier: official
+  - name: BleepingComputer
+    url: https://www.bleepingcomputer.com/feed/
+    type: rss
+    tier: news
+  - name: The Hacker News
+    url: https://feeds.feedburner.com/TheHackersNews
+    type: rss
+    tier: news
+  - name: Krebs on Security
+    url: https://krebsonsecurity.com/feed/
+    type: rss
+    tier: news
+  - name: SecurityWeek
+    url: https://feeds.feedburner.com/securityweek
+    type: rss
+    tier: news

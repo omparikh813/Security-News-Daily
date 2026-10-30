@@ -1,0 +1,11 @@
+# Runtime dependencies. Compile with:
+#   uv pip compile --generate-hashes --python-version 3.12 -o requirements.txt requirements.in
+feedparser>=6.0.11
+trafilatura>=2.0
+rapidfuzz>=3.9
+requests>=2.32.3
+jinja2>=3.1.6
+weasyprint>=66
+pydantic>=2.9
+pyyaml>=6.0.2
+python-dotenv>=1.0

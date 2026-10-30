@@ -1,0 +1,15 @@
+# Secrets (SR-5): never commit keys
+.env
+.env.*
+!.env.example
+
+# Outputs
+site/
+out/
+.malnews-*/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

@@ -1,0 +1,29 @@
+@font-face { font-family: "Caladea"; src: url("../fonts/Caladea-Regular.ttf"); }
+@font-face { font-family: "Caladea"; font-weight: bold; src: url("../fonts/Caladea-Bold.ttf"); }
+@font-face { font-family: "Caladea"; font-style: italic; src: url("../fonts/Caladea-Italic.ttf"); }
+
+@page {
+  size: Letter portrait;
+  margin: 0.6in 0.7in 0.7in;
+  @bottom-center { content: "MalNews · page " counter(page) " of " counter(pages); font: 8pt "Caladea"; color: #666; }
+}
+
+body { font-family: "Caladea", serif; font-size: 10.5pt; line-height: 1.35; color: #111; }
+
+.masthead { text-align: center; border-bottom: 3px double #111; padding-bottom: 6px; margin-bottom: 10px; }
+.masthead h1 { font-size: 40pt; margin: 0; letter-spacing: 1px; }
+.masthead .meta { font-size: 9pt; display: flex; justify-content: center; gap: 18px; color: #333; }
+
+h2 { font-size: 13pt; text-transform: uppercase; letter-spacing: 1.5px; border-bottom: 1px solid #111; margin: 14px 0 6px; }
+h3 { font-size: 12pt; margin: 8px 0 2px; }
+.lead h3 { font-size: 14pt; }
+
+.story { break-inside: avoid; margin-bottom: 8px; }
+.story p { margin: 2px 0; }
+.fix { font-style: italic; }
+.links { font-size: 8.5pt; }
+.tag { font-size: 7.5pt; text-transform: uppercase; border: 0.6pt solid #666; padding: 0 2px; color: #444; }
+
+a { color: #0b3d91; text-decoration: none; }
+
+footer { margin-top: 14px; border-top: 1px solid #111; font-size: 8.5pt; color: #333; }

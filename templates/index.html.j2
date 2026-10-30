@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>MalNews</title>
+<link rel="stylesheet" href="index.css">
+</head>
+<body>
+<h1>MalNews</h1>
+<p>A five-minute daily security briefing. <a href="latest.pdf">Read today’s edition</a>.</p>
+<h2>Editions</h2>
+<ul>
+{% for e in editions %}
+  <li><a href="{{ e.href }}">{{ e.day }}</a><br><code>SHA-256 {{ e.sha256 }}</code></li>
+{% endfor %}
+</ul>
+</body>
+</html>

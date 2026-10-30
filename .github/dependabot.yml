@@ -1,0 +1,12 @@
+# SR-4: weekly updates for Python packages and SHA-pinned GitHub Actions.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
