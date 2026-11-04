@@ -15,3 +15,6 @@ out/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# PRD is kept outside the repo
+docs/prd/
