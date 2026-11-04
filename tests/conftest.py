@@ -62,10 +62,12 @@ class FakeFetcher:
         self.pages = pages  # bytes = content, int = HTTP error status
         self.requested: list[str] = []
         self.caps: dict[str, int | None] = {}
+        self.headers: dict[str, dict | None] = {}
 
-    def get(self, url: str, max_bytes: int | None = None) -> FetchResult:
+    def get(self, url: str, max_bytes: int | None = None, headers: dict | None = None) -> FetchResult:
         self.requested.append(url)
         self.caps[url] = max_bytes
+        self.headers[url] = headers
         page = self.pages.get(url, 404)
         if isinstance(page, int):
             raise HTTPStatusError(page, url)

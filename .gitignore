@@ -3,7 +3,9 @@
 .env.*
 !.env.example
 
-# Outputs
+# Outputs and run state (state.json moves to the data branch in Phase 3)
+state.json
+.state-*
 site/
 out/
 .malnews-*/

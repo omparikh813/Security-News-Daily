@@ -149,13 +149,14 @@ class SafeFetcher:
         self.session.verify = True
         self.session.headers["User-Agent"] = user_agent
 
-    def get(self, url: str, max_bytes: int | None = None) -> FetchResult:
+    def get(self, url: str, max_bytes: int | None = None, headers: dict[str, str] | None = None) -> FetchResult:
+        """headers (e.g. an API key) are sent only to the original host, never to a redirect target."""
         last: Exception | None = None
         for attempt in range(self.retries + 1):
             if attempt:
                 time.sleep(2 ** (attempt - 1))
             try:
-                return self._get_once(url, max_bytes or self.max_bytes)
+                return self._get_once(url, max_bytes or self.max_bytes, headers or {})
             except HTTPStatusError as e:
                 if e.status < 500:
                     raise
@@ -164,10 +165,13 @@ class SafeFetcher:
                 last = e
         raise FetchError(f"giving up on {url[:120]}: {last}")
 
-    def _get_once(self, url: str, max_bytes: int) -> FetchResult:
+    def _get_once(self, url: str, max_bytes: int, headers: dict[str, str]) -> FetchResult:
+        origin = urlsplit(url).hostname
         for _ in range(self.max_redirects + 1):
             check_url(url)
-            with self.session.get(url, stream=True, allow_redirects=False, timeout=self.timeout) as resp:
+            hop_headers = headers if urlsplit(url).hostname == origin else {}
+            with self.session.get(url, stream=True, allow_redirects=False, timeout=self.timeout,
+                                  headers=hop_headers) as resp:
                 if resp.is_redirect:
                     url = urljoin(url, resp.headers.get("location", ""))
                     continue

@@ -11,9 +11,13 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from weasyprint import HTML
 
+from .enrich import CVE_ID_RE, CveInfo
 from .models import Story
+from .rank import similar_titles
 from .safety import RenderURLFetcher, safe_href
 from .settings import Config
+from .state import StoryOfWeek, StoryRecord, WeeklyContent
+from .summarize import excerpt_of
 
 ROOT = Path(__file__).resolve().parent.parent
 TEMPLATES = ROOT / "templates"
@@ -31,26 +35,91 @@ def jinja_env() -> Environment:
     )
 
 
-def _words(text: str | None) -> int:
-    return len(re.findall(r"\S+", text or ""))
+def _words(*texts: str | None) -> int:
+    return sum(len(re.findall(r"\S+", t or "")) for t in texts)
 
 
-def _story_words(s: Story) -> int:
-    summary = s.summary
-    return _words(s.title) + _words(summary.summary if summary else "") + _words(
-        summary.mitigation if summary else ""
-    ) + 2 * len(s.links)
-
-
-def _story_view(s: Story) -> dict:
+def _cve_view(i: CveInfo) -> dict | None:
+    if not CVE_ID_RE.match(i.id):
+        return None
     return {
-        "title": s.title,
-        "summary": s.summary.summary if s.summary else "",
-        "mitigation": s.summary.mitigation if s.summary else None,
-        "is_excerpt": bool(s.summary and s.summary.is_excerpt),
-        # Links come only from feed metadata, re-checked here (SR-2).
-        "links": [(p, h) for p, u in s.links if (h := safe_href(u))],
+        "id": i.id,
+        # FR-8: link both records; the ID is regex-checked, so it is safe in a URL.
+        "cve_url": f"https://www.cve.org/CVERecord?id={i.id}",
+        "nvd_url": f"https://nvd.nist.gov/vuln/detail/{i.id}",
+        "score": f"{i.cvss:.1f}" if i.cvss is not None else None,
+        "band": i.band,
+        "status": i.status,
+        "kev": i.kev,
+        "epss": f"{i.epss:.0%}" if i.epss is not None else None,
     }
+
+
+def _cve_views(infos: list[CveInfo]) -> list[dict]:
+    return [v for i in infos if (v := _cve_view(i))]
+
+
+def _top_band(cves: list[dict]) -> dict | None:
+    scored = [c for c in cves if c["score"] is not None]
+    return max(scored, key=lambda c: float(c["score"]), default=None)
+
+
+def _links(pairs) -> list[tuple[str, str]]:
+    # Links come only from feed metadata, re-checked here (SR-2).
+    return [(p, h) for p, u in pairs if (h := safe_href(u))]
+
+
+def _view(title, summary, mitigation, is_excerpt, links, cves) -> dict:
+    return {
+        "title": title, "summary": summary or "", "mitigation": mitigation, "is_excerpt": is_excerpt,
+        "links": _links(links), "cves": cves, "top": _top_band(cves), "kev": any(c["kev"] for c in cves),
+        "words": _words(title, summary, mitigation) + 2 * len(links) + 4 * len(cves),
+    }
+
+
+def story_view(s: Story) -> dict:
+    sm = s.summary
+    return _view(s.title, sm.summary if sm else "", sm.mitigation if sm else None,
+                 bool(sm and sm.is_excerpt), s.links, _cve_views(s.cve_infos))
+
+
+def _record_cves(record: StoryRecord, infos: dict[str, CveInfo], cfg: Config) -> list[dict]:
+    found = sorted((infos[c] for c in record.cves if c in infos), key=lambda i: -i.priority(cfg))
+    return _cve_views(found[: cfg.enrich.max_cves_per_story])
+
+
+def record_view(record: StoryRecord, infos: dict[str, CveInfo], cfg: Config) -> dict:
+    return _view(record.title, record.summary or excerpt_of(record.text or record.title), None, record.summary is None,
+                 [(lk.publisher, lk.url) for lk in record.links], _record_cves(record, infos, cfg))
+
+
+def weekly_view(sw: StoryOfWeek, infos: dict[str, CveInfo], cfg: Config) -> dict:
+    content = sw.content or WeeklyContent(what_happened=excerpt_of(sw.story.text or sw.story.title), is_excerpt=True)
+    v = record_view(sw.story, infos, cfg)
+    v.update({
+        "parts": [(label, text) for label, text in (
+            ("What happened", content.what_happened), ("Who is affected", content.who_affected),
+            ("What changed", content.what_changed), ("Fix", content.mitigation)) if text],
+        "is_excerpt": content.is_excerpt,
+        "updated": f"Updated {sw.updated_on:%A}" if sw.updated_on else None,
+    })
+    v["words"] = _words(v["title"], *(t for _, t in v["parts"])) + 2 * len(v["links"]) + 4 * len(v["cves"])
+    return v
+
+
+def same_event(s: Story, record: StoryRecord, cfg: Config) -> bool:
+    return s.id == record.id or bool(s.cves & set(record.cves)) or similar_titles(s.title, record.title, cfg)
+
+
+def sections(stories: list[Story], sotw: StoryRecord | None, cfg: Config) -> tuple[list, list, list]:
+    """FR-17 order: (News of the Day, New Threats, Other Headlines). Each story appears once."""
+    remaining = [s for s in stories if not (sotw and same_event(s, sotw, cfg))]
+    n = cfg.ranking.news_of_the_day
+    top, rest = remaining[:n], remaining[n:]
+    return top, [s for s in rest if s.zero_day], [s for s in rest if not s.zero_day]
+
+
+FIXED_WORDS = 150  # masthead, section headings, footer
 
 
 @dataclass
@@ -60,15 +129,21 @@ class Edition:
     dropped: int
 
 
-def build_edition(stories: list[Story], cfg: Config, now: datetime, source_names: list[str]) -> Edition:
-    """FR-17: News of the Day, then Other Headlines, trimmed to the word budget."""
-    n = cfg.ranking.news_of_the_day
-    top, rest = stories[:n], list(stories[n:])
-    fixed = 120  # masthead, section headings, footer
-    words = fixed + sum(_story_words(s) for s in stories)
+def build_edition(stories: list[Story], cfg: Config, now: datetime, source_names: list[str],
+                  sotw: StoryOfWeek | None = None, replaced: StoryRecord | None = None,
+                  infos: dict[str, CveInfo] | None = None) -> Edition:
+    """Story of the Week, News of the Day, New Threats, Other Headlines; trimmed to the word budget."""
+    infos = infos or {}
+    top, threats, others = sections(stories, sotw.story if sotw else None, cfg)
+    weekly = weekly_view(sotw, infos, cfg) if sotw else None
+    top_v, threat_v = [story_view(s) for s in top], [story_view(s) for s in threats]
+    # FR-15: the replaced pick moves to Other Headlines on the day it is replaced.
+    other_v = ([record_view(replaced, infos, cfg)] if replaced else []) + [story_view(s) for s in others]
+
+    words = FIXED_WORDS + sum(v["words"] for v in (*top_v, *threat_v, *other_v)) + (weekly["words"] if weekly else 0)
     dropped = 0
-    while rest and words > cfg.layout.max_words:  # drop lowest-ranked headlines first
-        words -= _story_words(rest.pop())
+    while other_v and words > cfg.layout.max_words:  # drop lowest-ranked headlines first
+        words -= other_v.pop()["words"]
         dropped += 1
 
     local = now.astimezone(timezone(timedelta(hours=cfg.edition.utc_offset_hours)))
@@ -78,8 +153,10 @@ def build_edition(stories: list[Story], cfg: Config, now: datetime, source_names
         "edition": edition_no,
         "read_minutes": max(1, math.ceil(words / cfg.layout.words_per_minute)),
         "generated": f"{local:%I:%M %p} PST".lstrip("0"),
-        "news_of_the_day": [_story_view(s) for s in top],
-        "headlines": [_story_view(s) for s in rest],
+        "story_of_week": weekly,
+        "news_of_the_day": top_v,
+        "new_threats": threat_v,
+        "headlines": other_v,
         "sources": source_names,
     }
     return Edition(context, words, dropped)

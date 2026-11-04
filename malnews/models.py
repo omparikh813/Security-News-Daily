@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .enrich import CveInfo
 
 
 @dataclass
@@ -30,9 +34,20 @@ class Summary:
 class Story:
     articles: list[Article]
     score: float = 0.0
-    priority: float = 0.0  # FR-5, filled in Phase 2
+    priority: float = 0.0  # FR-5: highest priority among the story's CVEs
     impact: bool = False
+    zero_day: bool = False  # FR-10
+    cve_infos: list[CveInfo] = field(default_factory=list)  # highest priority first
     summary: Summary | None = None
+
+    @property
+    def kev(self) -> bool:
+        return any(i.kev for i in self.cve_infos)
+
+    @property
+    def id(self) -> str:
+        """Stable identity across runs: the primary article's URL."""
+        return self.primary.url
 
     @property
     def primary(self) -> Article:

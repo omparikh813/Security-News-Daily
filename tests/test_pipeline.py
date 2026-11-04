@@ -91,7 +91,7 @@ def test_short_titles_do_not_merge(cfg):
 def test_official_counts_double_and_impact(cfg):
     official = make_article(source="CISA", tier="official", url="https://cisa.gov/1", cves=["CVE-2026-1"])
     news = make_article(source="BleepingComputer", url="https://bc.com/1", cves=["CVE-2026-1"], text="ransomware")
-    top = rank([official, news], cfg)[0]
+    top = rank(dedupe([official, news], cfg), cfg)[0]
     assert top.score == pytest.approx(0.4 * 3 / 5 + 0.2)  # (2 + 1) / 5 publishers + impact
     assert top.primary is official
 

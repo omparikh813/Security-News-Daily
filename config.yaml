@@ -32,13 +32,35 @@ ranking:                         # FR-6
     - supply chain
     - critical infrastructure
 
-priority:                        # FR-5 (used from Phase 2)
+priority:                        # FR-5
   cvss: 0.35
   epss: 0.35
   kev: 0.30
 
+enrich:                          # FR-7 to FR-9
+  nvd_url: https://services.nvd.nist.gov/rest/json/cves/2.0
+  kev_url: https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json
+  epss_url: https://api.first.org/data/v1/epss
+  nvd_interval_seconds: 0.7      # NVD allows 50 requests / 30 s with a key
+  nvd_interval_no_key: 6.5       # and 5 requests / 30 s without one
+  max_lookups_per_run: 80
+  max_cves_per_story: 5          # shown in the PDF, highest priority first
+  pending_days: 14               # FR-9: re-check "Score pending" CVEs this long
+
+zero_day:                        # FR-10
+  keywords:
+    - zero-day
+    - 0-day
+    - exploited before a patch
+    - no patch available
+
+story_of_week:                   # FR-15, FR-16
+  replace_ratio: 1.2             # a new story must score 20% higher
+  history_days: 7
+  records_per_day: 10
+  max_text_chars: 3000
+
 ai:                              # FR-11 to FR-14
-  # Model slugs and prices must be re-verified on openrouter.ai/models (PRD v2.8, fix 3).
   default_model: nvidia/nemotron-3.5-lightning:free
   allowed_models:
     - nvidia/nemotron-3.5-lightning:free
@@ -49,6 +71,7 @@ ai:                              # FR-11 to FR-14
   max_requests_per_run: 150
   max_input_chars: 6000
   max_output_tokens: 400
+  max_output_tokens_extended: 700  # Story of the Week (FR-16)
 
 layout:                          # FR-17
   max_words: 1150

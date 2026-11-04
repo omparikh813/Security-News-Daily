@@ -53,6 +53,35 @@ class PriorityCfg(_Strict):
     kev: float = Field(ge=0, le=1)
 
 
+class EnrichCfg(_Strict):
+    nvd_url: HttpUrl
+    kev_url: HttpUrl
+    epss_url: HttpUrl
+    nvd_interval_seconds: float = Field(ge=0, le=60)
+    nvd_interval_no_key: float = Field(ge=0, le=60)
+    max_lookups_per_run: int = Field(ge=0, le=500)
+    max_cves_per_story: int = Field(ge=1, le=20)
+    pending_days: int = Field(ge=1, le=60)
+
+    @field_validator("nvd_url", "kev_url", "epss_url")
+    @classmethod
+    def _https_only(cls, v: HttpUrl) -> HttpUrl:
+        if v.scheme != "https":
+            raise ValueError("data API URLs must use https")
+        return v
+
+
+class ZeroDayCfg(_Strict):
+    keywords: list[str] = Field(min_length=1, max_length=20)
+
+
+class StoryOfWeekCfg(_Strict):
+    replace_ratio: float = Field(ge=1, le=5)
+    history_days: int = Field(ge=1, le=14)
+    records_per_day: int = Field(ge=1, le=30)
+    max_text_chars: int = Field(ge=200, le=10_000)
+
+
 class AICfg(_Strict):
     default_model: str
     allowed_models: list[str] = Field(min_length=1, max_length=5)
@@ -62,6 +91,7 @@ class AICfg(_Strict):
     max_requests_per_run: int = Field(gt=0, le=1000)
     max_input_chars: int = Field(gt=0, le=50_000)
     max_output_tokens: int = Field(gt=0, le=4000)
+    max_output_tokens_extended: int = Field(gt=0, le=4000)
 
     @field_validator("endpoint")
     @classmethod
@@ -82,6 +112,9 @@ class Config(_Strict):
     dedupe: DedupeCfg
     ranking: RankingCfg
     priority: PriorityCfg
+    enrich: EnrichCfg
+    zero_day: ZeroDayCfg
+    story_of_week: StoryOfWeekCfg
     ai: AICfg
     layout: LayoutCfg
 

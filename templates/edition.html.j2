@@ -8,7 +8,9 @@
 <body>
 
 <header class="masthead">
+  <div class="rule"></div>
   <h1>MalNews</h1>
+  <div class="tagline">The five-minute security briefing</div>
   <div class="meta">
     <span>{{ date_long }}</span>
     <span>Edition {{ edition }}</span>
@@ -17,33 +19,89 @@
   </div>
 </header>
 
-{% macro story(s, lead=False) %}
-<article class="story{% if lead %} lead{% endif %}">
+{# FR-8: severity always shows the score and the band name, never color alone. #}
+{% macro severity(c) %}
+{% if c.score %}<span class="badge sev-{{ c.band | lower }}">{{ c.band }} {{ c.score }}</span>
+{% elif c.status == "pending" %}<span class="badge sev-none">Score pending</span>
+{% else %}<span class="badge sev-none">Score unavailable</span>{% endif %}
+{% endmacro %}
+
+{% macro badges(s) %}
+{% if s.top %}{{ severity(s.top) }}{% endif %}
+{% if s.kev %}<span class="badge kev">Known Exploited</span>{% endif %}
+{% endmacro %}
+
+{% macro cve_lines(s) %}
+{% if s.cves %}
+<ul class="cves">
+  {% for c in s.cves %}
+  <li>{{ severity(c) }} <a href="{{ c.cve_url }}">{{ c.id }}</a> · <a href="{{ c.nvd_url }}">NVD</a>{% if c.kev %} · Known Exploited{% endif %}{% if c.epss %} · EPSS {{ c.epss }}{% endif %}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endmacro %}
+
+{% macro links(s) %}
+<p class="links">{% for publisher, href in s.links %}<a href="{{ href }}">{{ publisher }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</p>
+{% endmacro %}
+
+{% macro story(s, cls="") %}
+<article class="story {{ cls }}">
+  <div class="badges">{{ badges(s) }}</div>
   <h3>{{ s.title }}</h3>
   <p>{% if s.is_excerpt %}<span class="tag">Excerpt</span> {% endif %}{{ s.summary }}</p>
   {% if s.mitigation %}<p class="fix"><b>Fix:</b> {{ s.mitigation }}</p>{% endif %}
-  <p class="links">
-    {% for publisher, href in s.links %}<a href="{{ href }}">{{ publisher }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
-  </p>
+  {{ cve_lines(s) }}
+  {{ links(s) }}
 </article>
 {% endmacro %}
 
-<section>
-  <h2>News of the Day</h2>
-  {% for s in news_of_the_day %}{{ story(s, lead=True) }}{% endfor %}
+{# Two stories per row. Rows, not CSS columns, so page breaks fall cleanly between rows. #}
+{% macro grid(items, cls="") %}
+{% for row in items | batch(2) %}
+<div class="row">{% for s in row %}{{ story(s, cls) }}{% endfor %}{% if row | length == 1 %}<div class="story"></div>{% endif %}</div>
+{% endfor %}
+{% endmacro %}
+
+{% if story_of_week %}
+{% set w = story_of_week %}
+<section class="sotw">
+  <div class="kicker">Story of the Week{% if w.updated %} <span class="updated">{{ w.updated }}</span>{% endif %}</div>
+  <div class="badges">{{ badges(w) }}</div>
+  <h2>{{ w.title }}</h2>
+  {% for label, text in w.parts %}
+  <p><b>{{ label }}.</b> {% if loop.first and w.is_excerpt %}<span class="tag">Excerpt</span> {% endif %}{{ text }}</p>
+  {% endfor %}
+  {{ cve_lines(w) }}
+  {{ links(w) }}
 </section>
+{% endif %}
+
+<section>
+  <h2 class="section">News of the Day</h2>
+  {% if news_of_the_day %}{{ story(news_of_the_day[0], "lead") }}{% endif %}
+  {{ grid(news_of_the_day[1:], "second") }}
+</section>
+
+{% if new_threats %}
+<section>
+  <h2 class="section">New Threats</h2>
+  {{ grid(new_threats, "threat") }}
+</section>
+{% endif %}
 
 {% if headlines %}
 <section>
-  <h2>Other Headlines</h2>
-  {% for s in headlines %}{{ story(s) }}{% endfor %}
+  <h2 class="section">Other Headlines</h2>
+  {{ grid(headlines) }}
 </section>
 {% endif %}
 
 <footer>
   <p><b>Sources:</b> {{ sources | join(", ") }}.</p>
   <p>Summaries are AI-written from the linked articles. Items marked “Excerpt” quote the article directly.
-  Severity scores come from NVD.</p>
+  Scores come from NVD (CVSS), CISA’s Known Exploited Vulnerabilities catalog, and FIRST EPSS.
+  Bands: Critical 9.0–10.0, High 7.0–8.9, Medium 4.0–6.9, Low 0.1–3.9.</p>
 </footer>
 
 </body>

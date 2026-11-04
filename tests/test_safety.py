@@ -85,10 +85,12 @@ class FakeSession:
     def __init__(self, responses):
         self.responses = list(responses)
         self.urls = []
+        self.sent_headers = []
 
     def get(self, url, **kw):
         assert kw["allow_redirects"] is False and kw["stream"] is True
         self.urls.append(url)
+        self.sent_headers.append(kw.get("headers"))
         return self.responses.pop(0)
 
 
@@ -112,6 +114,13 @@ def test_redirect_to_metadata_service_blocked(public_dns):
     with pytest.raises(BlockedURL):
         f.get("https://news.example.com/a")
     assert f.session.urls == ["https://news.example.com/a"]  # the internal URL was never requested
+
+
+def test_api_key_not_forwarded_to_another_host(public_dns):
+    f = fetcher_with([FakeResp(302, {"location": "/v2"}), FakeResp(302, {"location": "https://elsewhere.example.org/"}),
+                      FakeResp()])
+    f.get("https://services.nvd.example.gov/v1", headers={"apiKey": "secret"})
+    assert f.session.sent_headers == [{"apiKey": "secret"}, {"apiKey": "secret"}, {}]
 
 
 def test_too_many_redirects(public_dns):
