@@ -16,7 +16,8 @@ in the GitHub Actions workflows.
 
 ## Design
 
-The threat model and security requirements are in [`docs/prd/`](docs/prd/).
+The security controls are summarized in the README's
+[How the API keys are protected](README.md#how-the-api-keys-are-protected) table.
 Controls live in `malnews/safety.py` and `main.py`; attack tests live in
 `tests/test_t6_adversarial.py`, `tests/test_safety.py`, and `tests/test_main.py`.
 

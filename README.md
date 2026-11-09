@@ -8,7 +8,6 @@ ID comes from official data, never from AI.
 
 > Status: **Phase 2** (severity data, New Threats, Story of the Week, newspaper
 > layout). The daily GitHub Actions run and Pages site arrive in Phase 3.
-> See the [PRD](docs/prd/MalNews_PRD_v2.10.pdf).
 
 ## Pipeline
 
