@@ -17,7 +17,6 @@ from .rank import similar_titles
 from .safety import RenderURLFetcher, safe_href
 from .settings import Config
 from .state import StoryOfWeek, StoryRecord, WeeklyContent
-from .summarize import excerpt_of
 
 ROOT = Path(__file__).resolve().parent.parent
 TEMPLATES = ROOT / "templates"
@@ -69,9 +68,9 @@ def _links(pairs) -> list[tuple[str, str]]:
     return [(p, h) for p, u in pairs if (h := safe_href(u))]
 
 
-def _view(title, summary, mitigation, is_excerpt, links, cves) -> dict:
+def _view(title, summary, mitigation, links, cves) -> dict:
     return {
-        "title": title, "summary": summary or "", "mitigation": mitigation, "is_excerpt": is_excerpt,
+        "title": title, "summary": summary or "", "mitigation": mitigation,
         "links": _links(links), "cves": cves, "top": _top_band(cves), "kev": any(c["kev"] for c in cves),
         "words": _words(title, summary, mitigation) + 2 * len(links) + 4 * len(cves),
     }
@@ -79,8 +78,7 @@ def _view(title, summary, mitigation, is_excerpt, links, cves) -> dict:
 
 def story_view(s: Story) -> dict:
     sm = s.summary
-    return _view(s.title, sm.summary if sm else "", sm.mitigation if sm else None,
-                 bool(sm and sm.is_excerpt), s.links, _cve_views(s.cve_infos))
+    return _view(s.title, sm.summary if sm else "", sm.mitigation if sm else None, s.links, _cve_views(s.cve_infos))
 
 
 def _record_cves(record: StoryRecord, infos: dict[str, CveInfo], cfg: Config) -> list[dict]:
@@ -88,19 +86,29 @@ def _record_cves(record: StoryRecord, infos: dict[str, CveInfo], cfg: Config) ->
     return _cve_views(found[: cfg.enrich.max_cves_per_story])
 
 
-def record_view(record: StoryRecord, infos: dict[str, CveInfo], cfg: Config) -> dict:
-    return _view(record.title, record.summary or excerpt_of(record.text or record.title), None, record.summary is None,
-                 [(lk.publisher, lk.url) for lk in record.links], _record_cves(record, infos, cfg))
+def usable(content: WeeklyContent | None) -> bool:
+    """AI-written Story of the Week content (older state files may hold an excerpt instead)."""
+    return content is not None and not content.is_excerpt
+
+
+def record_summary(record: StoryRecord, content: WeeklyContent | None = None) -> str | None:
+    """The AI summary for a stored story, if there is one."""
+    return record.summary or (content.what_happened if usable(content) else None)
+
+
+def record_view(record: StoryRecord, infos: dict[str, CveInfo], cfg: Config, summary: str) -> dict:
+    return _view(record.title, summary, None, [(lk.publisher, lk.url) for lk in record.links],
+                 _record_cves(record, infos, cfg))
 
 
 def weekly_view(sw: StoryOfWeek, infos: dict[str, CveInfo], cfg: Config) -> dict:
-    content = sw.content or WeeklyContent(what_happened=excerpt_of(sw.story.text or sw.story.title), is_excerpt=True)
-    v = record_view(sw.story, infos, cfg)
+    """Only called when sw.content is usable() AI content."""
+    content = sw.content
+    v = record_view(sw.story, infos, cfg, content.what_happened)
     v.update({
         "parts": [(label, text) for label, text in (
             ("What happened", content.what_happened), ("Who is affected", content.who_affected),
             ("What changed", content.what_changed), ("Fix", content.mitigation)) if text],
-        "is_excerpt": content.is_excerpt,
         "updated": f"Updated {sw.updated_on:%A}" if sw.updated_on else None,
     })
     v["words"] = _words(v["title"], *(t for _, t in v["parts"])) + 2 * len(v["links"]) + 4 * len(v["cves"])
@@ -131,14 +139,19 @@ class Edition:
 
 def build_edition(stories: list[Story], cfg: Config, now: datetime, source_names: list[str],
                   sotw: StoryOfWeek | None = None, replaced: StoryRecord | None = None,
-                  infos: dict[str, CveInfo] | None = None) -> Edition:
-    """Story of the Week, News of the Day, New Threats, Other Headlines; trimmed to the word budget."""
+                  infos: dict[str, CveInfo] | None = None, replaced_summary: str | None = None) -> Edition:
+    """Story of the Week, News of the Day, New Threats, Other Headlines; trimmed to the word budget.
+
+    Every story shown has an AI summary: stories without one are left out.
+    """
     infos = infos or {}
+    stories = [s for s in stories if s.summary]
     top, threats, others = sections(stories, sotw.story if sotw else None, cfg)
-    weekly = weekly_view(sotw, infos, cfg) if sotw else None
+    weekly = weekly_view(sotw, infos, cfg) if sotw and usable(sotw.content) else None
     top_v, threat_v = [story_view(s) for s in top], [story_view(s) for s in threats]
     # FR-15: the replaced pick moves to Other Headlines on the day it is replaced.
-    other_v = ([record_view(replaced, infos, cfg)] if replaced else []) + [story_view(s) for s in others]
+    replaced_v = [record_view(replaced, infos, cfg, replaced_summary)] if replaced and replaced_summary else []
+    other_v = replaced_v + [story_view(s) for s in others]
 
     words = FIXED_WORDS + sum(v["words"] for v in (*top_v, *threat_v, *other_v)) + (weekly["words"] if weekly else 0)
     dropped = 0

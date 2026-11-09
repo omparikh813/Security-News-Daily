@@ -44,7 +44,6 @@ Rules:
 {"what_happened": "...", "who_affected": "... or null", "what_changed": "... or null", "mitigation": "... or null"}"""
 
 _DELIM_RE = re.compile(r"<\s*/?\s*article\s*>", re.I)
-_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'])")
 
 
 def resolve_model(env_value: str | None, cfg: AICfg) -> str:
@@ -59,12 +58,6 @@ def build_user_message(title: str, text: str, max_chars: int) -> str:
     """The article goes in as delimited data; delimiters inside it are removed."""
     source = _DELIM_RE.sub(" ", f"{title}\n\n{text}")[:max_chars]
     return f"<article>\n{source}\n</article>"
-
-
-def excerpt_of(text: str, max_chars: int = 400) -> str:
-    """FR-12 fallback: the article's first two sentences."""
-    out = " ".join(_SENTENCE_RE.split(text.strip())[:2])
-    return out if len(out) <= max_chars else out[: max_chars - 1].rsplit(" ", 1)[0] + "…"
 
 
 class InvalidOutput(ValueError):
@@ -99,6 +92,10 @@ def parse_summary(raw: str) -> tuple[str, str | None]:
 
 class TransientAIError(Exception):
     pass
+
+
+class FlaggedByModeration(TransientAIError):
+    """The provider refused this article. Retrying would be refused again."""
 
 
 class OpenRouterClient:
@@ -151,7 +148,7 @@ class OpenRouterClient:
         if status == 401:
             raise AIAuthError(f"provider rejected the API key (HTTP 401: {message or 'no details'})")
         if status == 403:  # OpenRouter: this article was flagged by moderation
-            raise TransientAIError(f"input flagged by provider moderation: {message}")
+            raise FlaggedByModeration(f"input flagged by provider moderation: {message}")
         if resp.status_code != 200 or error:
             raise TransientAIError(f"provider error {resp.status_code}: {message}")
         try:
@@ -165,17 +162,21 @@ class SummaryStats:
     requests: int = 0
     valid_first: int = 0
     valid_retry: int = 0
-    excerpts: int = 0  # the model was asked and failed twice
-    skipped: int = 0  # no request made (--max-requests reached)
+    failed: int = 0  # no usable summary after every attempt: story left out
+    flagged: int = 0  # refused by provider moderation: story left out
+    skipped: int = 0  # no request made (--max-requests reached): story left out
 
     @property
     def json_valid_rate(self) -> float | None:
-        tried = self.valid_first + self.valid_retry + self.excerpts
+        tried = self.valid_first + self.valid_retry + self.failed
         return None if not tried else (self.valid_first + self.valid_retry) / tried
 
 
+ATTEMPTS = 3
+
+
 class Summarizer:
-    """One request per story, one retry, then an excerpt (FR-12). Budget per FR-14."""
+    """Up to 3 attempts per story. A story with no AI summary is left out (FR-12). Budget per FR-14."""
 
     def __init__(self, client, cfg: AICfg, max_requests: int | None = None):
         self.client = client
@@ -192,47 +193,42 @@ class Summarizer:
         self.stats.requests += 1
         return True
 
-    def summarize(self, story: Story) -> Summary:
+    def _ask(self, system: str, user: str, parse, label: str, max_tokens: int | None = None):
+        """Return (parsed result or None, outcome), outcome being "ok", "retry_ok", "failed",
+        "flagged" or "skipped"."""
+        for attempt in range(ATTEMPTS):
+            if not self._spend():
+                return None, "skipped"
+            try:
+                return parse(self.client.complete(system, user, max_tokens=max_tokens)), (
+                    "ok" if attempt == 0 else "retry_ok")
+            except FlaggedByModeration as e:
+                log.info("%s left out: %s", label, e)
+                return None, "flagged"
+            except (TransientAIError, InvalidOutput) as e:
+                log.info("%s attempt %d rejected: %s", label, attempt + 1, e)
+        log.info("%s left out: no usable summary after %d attempts", label, ATTEMPTS)
+        return None, "failed"
+
+    def summarize(self, story: Story) -> Summary | None:
+        """An AI summary, or None when the story should be left out of the edition."""
         article = story.primary
         user = build_user_message(article.title, article.text, self.cfg.max_input_chars)
-        asked = False
-        for attempt in range(2):
-            if not self._spend():
-                break
-            asked = True
-            try:
-                raw = self.client.complete(SYSTEM_PROMPT, user)
-                summary, mitigation = parse_summary(raw)
-            except (TransientAIError, InvalidOutput) as e:
-                log.info("summary attempt %d rejected for %s: %s", attempt + 1, article.url, e)
-                continue
-            if attempt == 0:
-                self.stats.valid_first += 1
-            else:
-                self.stats.valid_retry += 1
-            return Summary(summary, mitigation, is_excerpt=False)
-        if asked:
-            self.stats.excerpts += 1
+        result, outcome = self._ask(SYSTEM_PROMPT, user, parse_summary, article.url)
+        st = self.stats
+        if outcome == "ok":
+            st.valid_first += 1
+        elif outcome == "retry_ok":
+            st.valid_retry += 1
         else:
-            self.stats.skipped += 1
-        return Summary(excerpt_of(article.text or article.excerpt or article.title), None, is_excerpt=True)
+            setattr(st, outcome, getattr(st, outcome) + 1)
+            return None
+        return Summary(*result)
 
-    def summarize_all(self, stories: list[Story]) -> None:
-        for story in stories:
-            story.summary = self.summarize(story)
-
-    def weekly(self, record: StoryRecord) -> WeeklyContent:
-        """FR-16: one extended request for the Story of the Week, with the same retry and fallback."""
-        source = record.text or record.summary or record.title
-        user = build_user_message(record.title, source, self.cfg.max_input_chars)
-        for attempt in range(2):
-            if not self._spend():
-                break
-            try:
-                raw = self.client.complete(WEEKLY_PROMPT, user, max_tokens=self.cfg.max_output_tokens_extended)
-                data = parse_fields(raw, "what_happened", ("who_affected", "what_changed", "mitigation"))
-            except (TransientAIError, InvalidOutput) as e:
-                log.info("Story of the Week attempt %d rejected: %s", attempt + 1, e)
-                continue
-            return WeeklyContent(**{k: (v[:1500] if v else v) for k, v in data.items()})
-        return WeeklyContent(what_happened=excerpt_of(source), is_excerpt=True)
+    def weekly(self, record: StoryRecord) -> WeeklyContent | None:
+        """FR-16: one extended request for the Story of the Week; None if no usable answer."""
+        user = build_user_message(record.title, record.text or record.summary or "", self.cfg.max_input_chars)
+        fields = ("who_affected", "what_changed", "mitigation")
+        data, _ = self._ask(WEEKLY_PROMPT, user, lambda raw: parse_fields(raw, "what_happened", fields),
+                            "Story of the Week", max_tokens=self.cfg.max_output_tokens_extended)
+        return WeeklyContent(**{k: (v[:1500] if v else v) for k, v in data.items()}) if data else None

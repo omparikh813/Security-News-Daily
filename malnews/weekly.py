@@ -14,7 +14,7 @@ from datetime import date, timedelta
 from .models import Story
 from .rank import similar_titles
 from .settings import Config
-from .state import LinkRecord, State, StoryOfWeek, StoryRecord
+from .state import LinkRecord, State, StoryOfWeek, StoryRecord, WeeklyContent
 
 
 def week_start(day: date) -> date:
@@ -42,6 +42,7 @@ def same_event(a: StoryRecord, b: StoryRecord, cfg: Config) -> bool:
 class WeeklyOutcome:
     status: str  # "reset", "kept", "replaced" or "none"
     replaced: StoryRecord | None = None  # the previous pick, shown in Other Headlines today
+    replaced_content: WeeklyContent | None = None  # its AI write-up, used as its summary there
 
 
 def update_story_of_week(state: State, today: list[StoryRecord], day: date, cfg: Config) -> WeeklyOutcome:
@@ -72,7 +73,7 @@ def update_story_of_week(state: State, today: list[StoryRecord], day: date, cfg:
     if best and best.score > 0 and best.score >= current.story.score * sw.replace_ratio:
         previous = current.story
         state.story_of_week = StoryOfWeek(story=best, set_on=day, updated_on=day)
-        return WeeklyOutcome("replaced", replaced=previous)
+        return WeeklyOutcome("replaced", replaced=previous, replaced_content=current.content)
     return WeeklyOutcome("kept")
 
 

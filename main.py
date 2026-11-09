@@ -21,7 +21,9 @@ from malnews.enrich import Enricher
 from malnews.errors import ConfigError, MalNewsError
 from malnews.publish import write_site
 from malnews.rank import cves_by_importance, dedupe, rank
-from malnews.render import FIXED_WORDS, build_edition, record_view, render_pdf, sections, story_view, weekly_view
+from malnews.render import (
+    FIXED_WORDS, build_edition, record_summary, record_view, render_pdf, same_event, story_view, usable, weekly_view,
+)
 from malnews.safety import SafeFetcher
 from malnews.settings import load_config, load_sources
 from malnews.state import load_state, save_state
@@ -105,23 +107,28 @@ def run(max_requests: int | None, out_dir: Path, state_path: Path) -> int:
     outcome = update_story_of_week(state, [to_record(s, today, cfg) for s in stories[:per_day]], today, cfg)
     sotw = state.story_of_week
     summarizer = Summarizer(OpenRouterClient(api_key=key, model=model, cfg=cfg.ai), cfg.ai, max_requests)
-    if sotw and sotw.content is None:
-        sotw.content = summarizer.weekly(sotw.story)
+    if sotw and not usable(sotw.content):
+        sotw.content = summarizer.weekly(sotw.story)  # None: no box today, retried next run
+    replaced_summary = record_summary(outcome.replaced, outcome.replaced_content) if outcome.replaced else None
 
-    # Summarize in reading order, and stop once the word budget is full (no wasted requests).
-    top, threats, others = sections(stories, sotw.story if sotw else None, cfg)
-    words = FIXED_WORDS + (weekly_view(sotw, infos, cfg)["words"] if sotw else 0)
-    if outcome.replaced:
-        words += record_view(outcome.replaced, infos, cfg)["words"]
-    headline_ids = {id(s) for s in others}
-    for s in top + threats + others:
-        if id(s) in headline_ids and words >= cfg.layout.max_words:
-            break
+    # Summarize in rank order. A story with no AI summary is left out and the next one moves up.
+    # Once the word budget is full, only zero-days (New Threats) are still summarized.
+    words = FIXED_WORDS + (weekly_view(sotw, infos, cfg)["words"] if sotw and usable(sotw.content) else 0)
+    if replaced_summary:
+        words += record_view(outcome.replaced, infos, cfg, replaced_summary)["words"]
+    shown = 0
+    for s in stories:
+        if sotw and same_event(s, sotw.story, cfg):
+            continue
+        if shown >= cfg.ranking.news_of_the_day and not s.zero_day and words >= cfg.layout.max_words:
+            continue
         s.summary = summarizer.summarize(s)
-        words += story_view(s)["words"]
-    shown = [s for s in stories if s.summary]
+        if s.summary:
+            shown += 1
+            words += story_view(s)["words"]
 
-    edition = build_edition(shown, cfg, now, [s.name for s in sources], sotw, outcome.replaced, infos)
+    edition = build_edition(stories, cfg, now, [s.name for s in sources], sotw, outcome.replaced, infos,
+                            replaced_summary)
     result = render_pdf(edition)
     if result.blocked:
         log.warning("renderer blocked %d resource request(s)", len(result.blocked))
@@ -145,15 +152,17 @@ def run(max_requests: int | None, out_dir: Path, state_path: Path) -> int:
         f"- Sources OK: {', '.join(report.ok) or 'none'}",
         f"- Sources failed: {', '.join(report.failed) or 'none'}",
         f"- Articles: {report.articles} ({report.full_text} with full text)",
-        f"- Stories after dedupe: {len(stories)}; shown: {len(shown)} ({edition.dropped} dropped for length)",
+        f"- Stories after dedupe: {len(stories)}; summarized: {shown} ({edition.dropped} dropped for length)",
         f"- CVEs: {counts['scored']} scored, {counts['pending']} pending, {counts['unavailable']} unavailable; "
         f"NVD lookups: {enricher.lookups}{' (NVD down)' if enricher.nvd_down else ''}"
         f"{'; KEV unavailable' if not enricher.kev_ok else ''}",
-        f"- New Threats: {len([s for s in threats if s.summary])}; pending CVEs tracked: {len(state.pending)}",
-        f"- Story of the Week: {outcome.status}" + (f" ({sotw.story.title[:80]})" if sotw else ""),
+        f"- New Threats: {len(edition.context['new_threats'])}; pending CVEs tracked: {len(state.pending)}",
+        f"- Story of the Week: {outcome.status}" + (f" ({sotw.story.title[:80]})" if sotw else "")
+        + ("" if not sotw or usable(sotw.content) else "; no AI write-up yet, box hidden today"),
         f"- Model: {model}; requests used: {st.requests}",
         f"- Valid JSON: {st.valid_first} first try, {st.valid_retry} after retry, "
-        f"{st.excerpts} excerpt fallbacks, {st.skipped} not sent"
+        f"{st.failed} left out (no usable summary), {st.flagged} left out (moderation), "
+        f"{st.skipped} left out (request cap)"
         + (f" ({rate:.0%} valid)" if rate is not None else ""),
         f"- Words: {edition.words}; PDF: {len(result.pdf) / 1024:.0f} KB",
     ])

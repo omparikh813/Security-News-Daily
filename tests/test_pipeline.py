@@ -11,7 +11,7 @@ from malnews.errors import AIAuthError, AllSourcesFailed, BudgetExceeded, Config
 from malnews.models import Story
 from malnews.rank import dedupe, rank
 from malnews.summarize import (
-    OpenRouterClient, Summarizer, TransientAIError, excerpt_of, parse_summary, resolve_model,
+    ATTEMPTS, FlaggedByModeration, OpenRouterClient, Summarizer, TransientAIError, parse_summary, resolve_model,
 )
 
 from .conftest import NOW, FakeFetcher, make_article, rss
@@ -30,7 +30,7 @@ def test_collect(cfg, sources, no_network):
         ),
         BC: rss(
             ("Unsafe link item", "javascript:alert(1)", NOW - timedelta(hours=1), "Skip me."),
-            ("Ransomware hits hospital", "http://www.bleepingcomputer.com/b", NOW - timedelta(hours=3), "Excerpt."),
+            ("Ransomware hits hospital", "http://www.bleepingcomputer.com/b", NOW - timedelta(hours=3), "Feed text."),
         ),
         "https://www.cisa.gov/a": b"<html><body><article><p>" + b"Full advisory text. " * 30 + b"</p></article></body></html>",
     })
@@ -103,7 +103,7 @@ class ScriptedClient:
         self.answers = list(answers)
         self.calls = 0
 
-    def complete(self, system, user):
+    def complete(self, system, user, max_tokens=None):
         self.calls += 1
         a = self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
         if isinstance(a, Exception):
@@ -128,19 +128,24 @@ def test_parse_summary_null_mitigation():
     assert parse_summary('{"summary": "S.", "mitigation": null}') == ("S.", None)
 
 
-def test_retry_once_then_excerpt(cfg):
+def test_three_attempts_then_left_out(cfg):
     client = ScriptedClient("garbage")
     s = Summarizer(client, cfg.ai)
-    out = s.summarize(story())
-    assert client.calls == 2 and out.is_excerpt
-    assert out.summary == "Northwind fixed CVE-2026-90011. Upgrade now."
+    assert s.summarize(story()) is None  # no excerpt: the story is left out
+    assert client.calls == ATTEMPTS == 3 and s.stats.failed == 1
 
 
-def test_retry_succeeds(cfg):
-    client = ScriptedClient("not json", '{"summary": "Northwind fixed it.", "mitigation": "Upgrade."}')
+def test_third_attempt_succeeds(cfg):
+    client = ScriptedClient("not json", TransientAIError("502"), '{"summary": "Northwind fixed it.", "mitigation": "Upgrade."}')
     s = Summarizer(client, cfg.ai)
     out = s.summarize(story())
-    assert not out.is_excerpt and out.mitigation == "Upgrade." and s.stats.valid_retry == 1
+    assert out.summary == "Northwind fixed it." and out.mitigation == "Upgrade." and s.stats.valid_retry == 1
+
+
+def test_moderation_flag_is_not_retried(cfg):
+    client = ScriptedClient(FlaggedByModeration("403"))
+    s = Summarizer(client, cfg.ai)
+    assert s.summarize(story()) is None and client.calls == 1 and s.stats.flagged == 1
 
 
 def test_429_stops_without_retry(cfg):
@@ -157,11 +162,11 @@ def test_hard_budget_raises(cfg):
         s.summarize(story())
 
 
-def test_max_requests_falls_back_to_excerpts(cfg):
+def test_max_requests_leaves_the_rest_out(cfg):
     client = ScriptedClient('{"summary": "ok", "mitigation": null}')
     s = Summarizer(client, cfg.ai, max_requests=1)
-    s.summarize(story())
-    assert s.summarize(story()).is_excerpt and client.calls == 1 and s.stats.skipped == 1
+    assert s.summarize(story()).summary == "ok"
+    assert s.summarize(story()) is None and client.calls == 1 and s.stats.skipped == 1
 
 
 def test_model_allowlist(cfg):
@@ -190,7 +195,7 @@ class FakeHTTP:
     (402, {}, RateLimitStop),
     (200, {"error": {"code": 429, "message": "rate limited"}}, RateLimitStop),
     (401, {"error": {"code": 401, "message": "User not found."}}, AIAuthError),
-    (403, {"error": {"code": 403, "message": "Input flagged"}}, TransientAIError),
+    (403, {"error": {"code": 403, "message": "Input flagged"}}, FlaggedByModeration),
     (500, {}, TransientAIError),
 ])
 def test_openrouter_errors(cfg, status, body, exc):
@@ -215,5 +220,13 @@ def test_openrouter_request(cfg):
     assert "response_format" not in http.sent["json"]  # FR-12
 
 
-def test_excerpt_two_sentences():
-    assert excerpt_of("One. Two. Three.") == "One. Two."
+def test_weekly_none_when_unusable(cfg):
+    from malnews.state import LinkRecord, StoryRecord
+
+    rec = StoryRecord(id="https://x.com/a", day=NOW.date(), title="T", score=0.5, text="Body.",
+                      links=[LinkRecord(publisher="P", url="https://x.com/a")])
+    assert Summarizer(ScriptedClient("nope"), cfg.ai).weekly(rec) is None
+    good = '{"what_happened": "It happened.", "who_affected": null, "what_changed": "n/a", "mitigation": "Patch."}'
+    content = Summarizer(ScriptedClient(good), cfg.ai).weekly(rec)
+    assert (content.what_happened, content.who_affected, content.what_changed, content.mitigation) == (
+        "It happened.", None, None, "Patch.")

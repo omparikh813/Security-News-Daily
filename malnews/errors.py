@@ -30,6 +30,6 @@ class AllSourcesFailed(MalNewsError):
 
 
 class AIAuthError(MalNewsError):
-    """The provider rejected the API key. Fail loudly instead of printing excerpts."""
+    """The provider rejected the API key. Fail loudly instead of leaving every story out."""
 
     exit_code = 6

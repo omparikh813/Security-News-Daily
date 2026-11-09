@@ -34,7 +34,7 @@ def full_edition(cfg, n_stories=16):
         s.cve_infos = [infos[c] for c in cves]
         s.zero_day = i in (4, 7)
         s.score = 1 - i / 100
-        s.summary = Summary(SENT * 2, "Apply the vendor update and rotate credentials." if i % 2 else None, False)
+        s.summary = Summary(SENT * 2, "Apply the vendor update and rotate credentials." if i % 2 else None)
         stories.append(s)
     weekly = StoryOfWeek(
         story=StoryRecord(id="https://news.example.com/sotw", day=date(2026, 10, 27), title="Week's biggest breach story",
@@ -45,7 +45,8 @@ def full_edition(cfg, n_stories=16):
     replaced = StoryRecord(id="https://news.example.com/old", day=date(2026, 10, 26), title="Last pick of the week",
                            score=0.5, links=[LinkRecord(publisher="Krebs", url="https://krebsonsecurity.com/x")],
                            text="Previous pick summary sentence. Another one.", summary=None)
-    return build_edition(stories, cfg, NOW, ["CISA", "Krebs"], weekly, replaced, infos)
+    return build_edition(stories, cfg, NOW, ["CISA", "Krebs"], weekly, replaced, infos,
+                         replaced_summary="The previous pick, summarized by AI when it was chosen.")
 
 
 def pdf_text(pdf):
@@ -86,7 +87,7 @@ def test_word_budget_drops_lowest_headlines(cfg):
 def test_score_and_band_name_both_printed(cfg, cvss, label, no_network):
     info = CveInfo("CVE-2026-10009", "scored", cvss, "3.1")
     s = Story(articles=[make_article("A single story title here", cves=["CVE-2026-10009"])],
-              cve_infos=[info], summary=Summary("Summary.", None, False))
+              cve_infos=[info], summary=Summary("Summary.", None))
     _, text = pdf_text(render_pdf(build_edition([s], cfg, NOW, ["X"])).pdf)
     assert label.lower().replace(" ", "") in text.lower().replace(" ", "")
 
@@ -94,10 +95,31 @@ def test_score_and_band_name_both_printed(cfg, cvss, label, no_network):
 def test_story_of_week_shown_once(cfg):
     """A story that is also today's news appears only as the Story of the Week."""
     today = Story(articles=[make_article("Week's biggest breach story", url="https://news.example.com/sotw")],
-                  summary=Summary("S.", None, False))
+                  summary=Summary("S.", None))
     weekly = StoryOfWeek(story=StoryRecord(id="https://news.example.com/sotw", day=NOW.date() - timedelta(1),
                                            title="Week's biggest breach story", score=0.9,
                                            links=[LinkRecord(publisher="P", url="https://news.example.com/sotw")]),
-                         set_on=NOW.date())
+                         content=WeeklyContent(what_happened="AI write-up."), set_on=NOW.date())
     ctx = build_edition([today], cfg, NOW, ["X"], weekly).context
     assert ctx["story_of_week"] and ctx["news_of_the_day"] == []
+
+
+def test_no_excerpts_anywhere(cfg, no_network):
+    """Stories without an AI summary, an excerpt-only Story of the Week, and a replaced pick with
+    no summary are all left out rather than printed."""
+    ai = Story(articles=[make_article("Story with an AI summary", url="https://a.example.com/1")],
+               summary=Summary("Written by the model.", None))
+    raw = Story(articles=[make_article("Story the model could not summarize", url="https://a.example.com/2",
+                                       text="Raw article text that must never be printed.")])
+    old = StoryOfWeek(story=StoryRecord(id="https://a.example.com/w", day=NOW.date(), title="Old weekly pick",
+                                        score=0.5, links=[LinkRecord(publisher="P", url="https://a.example.com/w")]),
+                      content=WeeklyContent(what_happened="First two sentences of the article.", is_excerpt=True),
+                      set_on=NOW.date())
+    replaced = StoryRecord(id="https://a.example.com/r", day=NOW.date(), title="Replaced pick with no summary",
+                           score=0.4, links=[LinkRecord(publisher="P", url="https://a.example.com/r")])
+    edition = build_edition([ai, raw], cfg, NOW, ["X"], old, replaced)
+    ctx = edition.context
+    assert ctx["story_of_week"] is None
+    assert [v["title"] for v in ctx["news_of_the_day"] + ctx["headlines"]] == ["Story with an AI summary"]
+    _, text = pdf_text(render_pdf(edition).pdf)
+    assert "excerpt" not in text.lower() and "Raw article text" not in text and "First two sentences" not in text

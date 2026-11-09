@@ -144,3 +144,31 @@ def test_no_real_keys_committed():
         path = ROOT / name
         if path.is_file() and path.suffix not in (".ttf", ".pdf"):
             assert not REAL_KEY_RE.search(path.read_text(errors="ignore")), name
+
+
+def pdf_text_of(path) -> str:
+    return " ".join(p.extract_text() for p in pypdf.PdfReader(io.BytesIO(path.read_bytes())).pages)
+
+
+def test_story_without_ai_summary_is_left_out(tmp_path, env, fake_world, monkeypatch, no_network):
+    answer = fake_world.complete
+
+    def picky(self, system, user, max_tokens=None):
+        return "not json" if "Data broker" in user else answer(self, system, user, max_tokens)
+
+    monkeypatch.setattr(fake_world, "complete", picky)
+    assert main.main([], out_dir=tmp_path, state_path=tmp_path / "state.json") == 0
+    text = pdf_text_of(tmp_path / "latest.pdf")
+    assert "Data broker" not in text and "Vendor flaw" in text
+
+
+def test_excerpt_in_old_state_is_replaced_by_ai(tmp_path, env, fake_world, no_network):
+    state_path = tmp_path / "state.json"
+    assert main.main([], out_dir=tmp_path, state_path=state_path) == 0
+    state = json.loads(state_path.read_text())
+    state["story_of_week"]["content"] = {"what_happened": "OLD EXCERPT TEXT.", "is_excerpt": True}
+    state_path.write_text(json.dumps(state))
+    assert main.main([], out_dir=tmp_path, state_path=state_path) == 0
+    text = pdf_text_of(tmp_path / "latest.pdf")
+    assert "OLD EXCERPT TEXT" not in text and "Weekly happened." in text
+    assert json.loads(state_path.read_text())["story_of_week"]["content"]["is_excerpt"] is False

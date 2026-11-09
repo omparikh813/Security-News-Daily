@@ -35,7 +35,7 @@ def pdf_links(pdf: bytes) -> list[str]:
 
 def test_hostile_headline_and_summary_are_escaped(cfg, no_network):
     s = Story(articles=[make_article(title="Breaking " + " ".join(HOSTILE), url="https://news.example.com/a")],
-              summary=Summary(" ".join(HOSTILE), None, is_excerpt=False))
+              summary=Summary(" ".join(HOSTILE), None))
     result = render_pdf(build_edition([s], cfg, NOW, ["Test"]))
     assert result.blocked == []  # escaped, so nothing was even requested
     assert '<img src="file:///etc/passwd">' in pdf_text(result.pdf)  # printed as text

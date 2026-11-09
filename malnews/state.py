@@ -72,7 +72,7 @@ class WeeklyContent(_Strict):
     who_affected: str | None = Field(default=None, max_length=1500)
     what_changed: str | None = Field(default=None, max_length=1500)
     mitigation: str | None = Field(default=None, max_length=1500)
-    is_excerpt: bool = False
+    is_excerpt: bool = False  # older state files only; such content is regenerated
 
 
 class StoryOfWeek(_Strict):

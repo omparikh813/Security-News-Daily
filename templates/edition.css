@@ -55,7 +55,6 @@ a { color: #0b3d91; text-decoration: none; }
 .sev-low { background: #3b6e3b; }
 .sev-none { background: #fff; color: #444; border: 0.6pt solid #888; }
 .kev { background: #111; }
-.tag { font-size: 7.5pt; text-transform: uppercase; border: 0.6pt solid #666; padding: 0 2px; color: #444; }
 
 ul.cves { list-style: none; padding: 0; margin: 4px 0; font-size: 9pt; }
 ul.cves li { margin: 1px 0; }

@@ -49,12 +49,12 @@ def _article_text(url: str, fetcher, robots: RobotsCache, max_chars: int, refuse
     except HTTPStatusError as e:
         if e.status in (403, 429):  # rate-limited or bot-blocked: leave this site alone for the run
             refused.add(host)
-            log.warning("%s returned HTTP %d; using feed excerpts for its other articles", host, e.status)
+            log.warning("%s returned HTTP %d; summarizing its articles from the feed text", host, e.status)
         else:
-            log.info("article fetch failed, using excerpt: %s", e)
+            log.info("article fetch failed, summarizing from the feed text: %s", e)
         return None
     except FetchError as e:
-        log.info("article fetch failed, using excerpt: %s", e)
+        log.info("article fetch failed, summarizing from the feed text: %s", e)
         return None
     text = trafilatura.extract(
         page.content.decode("utf-8", "replace"),

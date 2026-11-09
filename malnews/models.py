@@ -27,7 +27,6 @@ class Article:
 class Summary:
     summary: str
     mitigation: str | None
-    is_excerpt: bool
 
 
 @dataclass
