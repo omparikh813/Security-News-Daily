@@ -92,6 +92,7 @@ class AICfg(_Strict):
     max_input_chars: int = Field(gt=0, le=50_000)
     max_output_tokens: int = Field(gt=0, le=4000)
     max_output_tokens_extended: int = Field(gt=0, le=4000)
+    reasoning_max_tokens: int = Field(ge=0, le=4000)
 
     @field_validator("endpoint")
     @classmethod

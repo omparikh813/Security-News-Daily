@@ -70,8 +70,9 @@ ai:                              # FR-11 to FR-14
   requests_per_minute: 20
   max_requests_per_run: 150
   max_input_chars: 20000         # the whole article (matches max_article_chars)
-  max_output_tokens: 1200        # room for models that reason before answering
-  max_output_tokens_extended: 1800  # Story of the Week (FR-16)
+  max_output_tokens: 4000        # whole reply: hidden thinking + the summary
+  max_output_tokens_extended: 4000  # Story of the Week (FR-16)
+  reasoning_max_tokens: 1000     # cap on hidden thinking (OpenRouter 'reasoning'); 0 = don't send
 
 layout:                          # FR-17
   max_words: 1150

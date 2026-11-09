@@ -11,7 +11,8 @@ from malnews.errors import AIAuthError, AllSourcesFailed, BudgetExceeded, Config
 from malnews.models import Story
 from malnews.rank import dedupe, rank
 from malnews.summarize import (
-    ATTEMPTS, FlaggedByModeration, InvalidOutput, OpenRouterClient, Summarizer, TransientAIError, parse_summary,
+    ATTEMPTS, FlaggedByModeration, InvalidOutput, OpenRouterClient, ReplyCutOff, Summarizer, TransientAIError,
+    parse_summary,
     parse_weekly, resolve_model,
 )
 
@@ -240,11 +241,39 @@ def test_auth_error_explains_itself(cfg):
         client.complete("s", "u")
 
 
-def test_empty_content_is_a_retryable_error(cfg):
+def test_reply_cut_off_by_thinking(cfg):
     body = {"choices": [{"message": {"content": "", "reasoning": "long thoughts"}, "finish_reason": "length"}]}
     client = OpenRouterClient(api_key="sk-or-test-000000", model="m", cfg=cfg.ai, session=FakeHTTP(200, body))
-    with pytest.raises(TransientAIError, match="finish_reason=length"):
+    with pytest.raises(ReplyCutOff, match="token limit"):
         client.complete("s", "u")
+
+
+def test_cut_off_reply_is_not_retried(cfg):
+    client = ScriptedClient(ReplyCutOff("cut off"))
+    s = Summarizer(client, cfg.ai)
+    assert s.summarize(story()) is None and client.calls == 1 and s.stats.failed == 1
+
+
+def test_other_empty_reply_is_retried(cfg):
+    body = {"choices": [{"message": {"content": ""}, "finish_reason": "stop"}]}
+    client = OpenRouterClient(api_key="sk-or-test-000000", model="m", cfg=cfg.ai, session=FakeHTTP(200, body))
+    with pytest.raises(TransientAIError, match="finish_reason=stop"):
+        client.complete("s", "u")
+
+
+def test_thinking_is_capped(cfg):
+    http = FakeHTTP(200, {"choices": [{"message": {"content": "A summary."}}]})
+    OpenRouterClient(api_key="sk-or-test-000000", model="m", cfg=cfg.ai, session=http).complete("s", "u")
+    sent = http.sent["json"]
+    assert sent["reasoning"] == {"max_tokens": cfg.ai.reasoning_max_tokens, "exclude": True}
+    assert sent["max_tokens"] == cfg.ai.max_output_tokens > cfg.ai.reasoning_max_tokens
+
+
+def test_reasoning_setting_can_be_turned_off(cfg):
+    ai = cfg.ai.model_copy(update={"reasoning_max_tokens": 0})
+    http = FakeHTTP(200, {"choices": [{"message": {"content": "A summary."}}]})
+    OpenRouterClient(api_key="sk-or-test-000000", model="m", cfg=ai, session=http).complete("s", "u")
+    assert "reasoning" not in http.sent["json"]
 
 
 def test_whole_article_is_sent(cfg):

@@ -152,6 +152,10 @@ class FlaggedByModeration(TransientAIError):
     """The provider refused this article. Retrying would be refused again."""
 
 
+class ReplyCutOff(TransientAIError):
+    """The reply hit the token limit before any answer. The same request would be cut off again."""
+
+
 class OpenRouterClient:
     def __init__(self, *, api_key: str, model: str, cfg: AICfg, session: requests.Session | None = None):
         self.api_key = api_key
@@ -168,6 +172,19 @@ class OpenRouterClient:
             time.sleep(wait)
         self._last = time.monotonic()
 
+    def payload(self, system: str, user: str, max_tokens: int | None = None) -> dict:
+        body = {
+            "model": self.model,
+            "temperature": 0.2,
+            "max_tokens": max_tokens or self.cfg.max_output_tokens,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        }
+        if self.cfg.reasoning_max_tokens:
+            # Models that think before answering otherwise spend the whole budget thinking.
+            # exclude: the thinking still happens but is not sent back to us.
+            body["reasoning"] = {"max_tokens": self.cfg.reasoning_max_tokens, "exclude": True}
+        return body
+
     def complete(self, system: str, user: str, max_tokens: int | None = None) -> str:
         self._throttle()
         try:
@@ -178,12 +195,7 @@ class OpenRouterClient:
                     "X-Title": "MalNews",
                     "HTTP-Referer": "https://github.com/omparikh813/security-news-daily",
                 },
-                json={
-                    "model": self.model,
-                    "temperature": 0.2,
-                    "max_tokens": max_tokens or self.cfg.max_output_tokens,
-                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                },
+                json=self.payload(system, user, max_tokens),
                 timeout=self.cfg.timeout_seconds,
             )
         except (requests.ConnectionError, requests.Timeout) as e:
@@ -211,8 +223,11 @@ class OpenRouterClient:
         except (KeyError, IndexError, TypeError, AttributeError) as e:
             raise TransientAIError("malformed provider response") from e
         if not clean_reply(content):
-            # Usually a model that spent its whole token budget thinking before answering.
-            raise TransientAIError(f"empty reply (finish_reason={choice.get('finish_reason')})")
+            reason = choice.get("finish_reason")
+            if reason == "length":
+                raise ReplyCutOff("empty reply: the token limit was reached before the answer "
+                                  "(raise max_output_tokens or lower reasoning_max_tokens in config.yaml)")
+            raise TransientAIError(f"empty reply (finish_reason={reason})")
         return content
 
 
@@ -264,6 +279,9 @@ class Summarizer:
             except FlaggedByModeration as e:
                 log.info("%s left out: %s", label, e)
                 return None, "flagged"
+            except ReplyCutOff as e:
+                log.info("%s left out: %s", label, e)
+                return None, "failed"
             except (TransientAIError, InvalidOutput) as e:
                 log.info("%s attempt %d rejected: %s", label, attempt + 1, e)
         log.info("%s left out: no usable summary after %d attempts", label, ATTEMPTS)
