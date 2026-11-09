@@ -1,4 +1,4 @@
-# Runtime dependencies. Compile with:
+# Runtime dependencies. Compile from inside config/ with:
 #   uv pip compile --generate-hashes --python-version 3.12 -o requirements.txt requirements.in
 feedparser>=6.0.11
 trafilatura>=2.0

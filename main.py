@@ -31,6 +31,7 @@ from malnews.summarize import OpenRouterClient, Summarizer, resolve_model
 from malnews.weekly import remember, to_record, update_story_of_week
 
 ROOT = Path(__file__).resolve().parent
+CONFIG = ROOT / "config"
 SECRET_ENV = ("OPENROUTER_API_KEY", "NVD_API_KEY")
 log = logging.getLogger("malnews")
 
@@ -71,8 +72,8 @@ def write_job_summary(lines: list[str]) -> None:
 
 
 def run(max_requests: int | None, out_dir: Path, state_path: Path) -> int:
-    cfg = load_config(ROOT / "config.yaml")
-    sources = load_sources(ROOT / "sources.yaml")
+    cfg = load_config(CONFIG / "config.yaml")
+    sources = load_sources(CONFIG / "sources.yaml")
     if not os.environ.get("GITHUB_ACTIONS"):
         from dotenv import load_dotenv  # local runs only; CI uses repository secrets
 

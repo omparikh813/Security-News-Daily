@@ -40,7 +40,7 @@ Each CVE shows its score and band (e.g. "Critical 9.8"), Known Exploited, EPSS, 
 
 ```bash
 python3.12 -m venv .venv && . .venv/bin/activate
-pip install --require-hashes -r requirements.txt -r requirements-dev.txt
+pip install --require-hashes -r config/requirements.txt -r config/requirements-dev.txt
 python -m pytest -q                       # offline tests (T1, T6)
 python -m pytest -m live -s               # 10 real CVEs vs NVD (needs internet)
 

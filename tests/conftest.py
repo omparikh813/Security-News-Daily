@@ -20,12 +20,12 @@ NOW = datetime(2026, 10, 30, 14, 0, tzinfo=timezone.utc)
 
 @pytest.fixture(scope="session")
 def cfg():
-    return load_config(ROOT / "config.yaml")
+    return load_config(ROOT / "config" / "config.yaml")
 
 
 @pytest.fixture(scope="session")
 def sources():
-    return load_sources(ROOT / "sources.yaml")
+    return load_sources(ROOT / "config" / "sources.yaml")
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-"""Strict, schema-validated loading of config.yaml and sources.yaml (SR-7)."""
+"""Strict, schema-validated loading of config/config.yaml and config/sources.yaml (SR-7)."""
 
 from __future__ import annotations
 

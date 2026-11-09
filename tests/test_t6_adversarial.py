@@ -55,7 +55,7 @@ def test_renderer_blocks_even_unescaped_html(no_network):
 
 @pytest.mark.parametrize("url", [
     "file:///etc/passwd", "file:///proc/self/environ", "http://example.com/x.css",
-    "data:text/css,body{}", (ROOT / "templates" / ".." / "config.yaml").as_uri(),
+    "data:text/css,body{}", (ROOT / "templates" / ".." / "config" / "config.yaml").as_uri(),
 ])
 def test_render_fetcher_allowlist(url):
     with pytest.raises(ValueError):

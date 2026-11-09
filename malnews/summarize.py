@@ -226,7 +226,7 @@ class OpenRouterClient:
             reason = choice.get("finish_reason")
             if reason == "length":
                 raise ReplyCutOff("empty reply: the token limit was reached before the answer "
-                                  "(raise max_output_tokens or lower reasoning_max_tokens in config.yaml)")
+                                  "(raise max_output_tokens or lower reasoning_max_tokens in config/config.yaml)")
             raise TransientAIError(f"empty reply (finish_reason={reason})")
         return content
 

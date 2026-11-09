@@ -1,4 +1,4 @@
-# Test and audit tools. Compile with:
+# Test and audit tools. Compile from inside config/ with:
 #   uv pip compile --generate-hashes --python-version 3.12 -o requirements-dev.txt requirements-dev.in
 -c requirements.txt
 pytest>=8.3
