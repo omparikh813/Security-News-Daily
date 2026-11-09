@@ -12,7 +12,7 @@ collection:                      # FR-2, SR-6
   max_redirects: 5
   max_feed_bytes: 30000000       # CISA's all.xml is several MB
   max_response_bytes: 5000000    # articles and robots.txt
-  max_article_chars: 20000
+  max_article_chars: 20000       # full extracted article text, sent whole to the model
 
 dedupe:                          # FR-4
   title_similarity: 85
@@ -58,7 +58,7 @@ story_of_week:                   # FR-15, FR-16
   replace_ratio: 1.2             # a new story must score 20% higher
   history_days: 7
   records_per_day: 10
-  max_text_chars: 3000
+  max_text_chars: 10000          # article text kept for the Story of the Week write-up
 
 ai:                              # FR-11 to FR-14
   default_model: nvidia/nemotron-3.5-lightning:free
@@ -69,9 +69,9 @@ ai:                              # FR-11 to FR-14
   timeout_seconds: 60
   requests_per_minute: 20
   max_requests_per_run: 150
-  max_input_chars: 6000
-  max_output_tokens: 400
-  max_output_tokens_extended: 700  # Story of the Week (FR-16)
+  max_input_chars: 20000         # the whole article (matches max_article_chars)
+  max_output_tokens: 1200        # room for models that reason before answering
+  max_output_tokens_extended: 1800  # Story of the Week (FR-16)
 
 layout:                          # FR-17
   max_words: 1150

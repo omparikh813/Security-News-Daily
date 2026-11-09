@@ -56,9 +56,9 @@ def fake_world(monkeypatch):
 
         def complete(self, system, user, max_tokens=None):
             if "Story of the Week" in system:
-                return ('{"what_happened": "Weekly happened.", "who_affected": "Everyone.", '
-                        '"what_changed": "Nothing yet.", "mitigation": "Patch it."}')
-            return '{"summary": "A short summary.", "mitigation": "Patch it."}'
+                return ("What happened: Weekly happened.\nWho is affected: Everyone.\n"
+                        "What changed: Nothing yet.\nFix: Patch it.")
+            return "A short summary.\nFix: Patch it."
 
     fetcher = FakeFetcher(pages)
     monkeypatch.setattr(main, "SafeFetcher", lambda **kw: fetcher)
@@ -154,7 +154,7 @@ def test_story_without_ai_summary_is_left_out(tmp_path, env, fake_world, monkeyp
     answer = fake_world.complete
 
     def picky(self, system, user, max_tokens=None):
-        return "not json" if "Data broker" in user else answer(self, system, user, max_tokens)
+        return "" if "Data broker" in user else answer(self, system, user, max_tokens)
 
     monkeypatch.setattr(fake_world, "complete", picky)
     assert main.main([], out_dir=tmp_path, state_path=tmp_path / "state.json") == 0

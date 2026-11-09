@@ -11,7 +11,8 @@ from malnews.errors import AIAuthError, AllSourcesFailed, BudgetExceeded, Config
 from malnews.models import Story
 from malnews.rank import dedupe, rank
 from malnews.summarize import (
-    ATTEMPTS, FlaggedByModeration, OpenRouterClient, Summarizer, TransientAIError, parse_summary, resolve_model,
+    ATTEMPTS, FlaggedByModeration, InvalidOutput, OpenRouterClient, Summarizer, TransientAIError, parse_summary,
+    parse_weekly, resolve_model,
 )
 
 from .conftest import NOW, FakeFetcher, make_article, rss
@@ -116,27 +117,55 @@ def story():
 
 
 @pytest.mark.parametrize("raw", [
-    '{"summary": "S.", "mitigation": "M."}',
-    'Sure!\n```json\n{"summary": "S.", "mitigation": "M."}\n```',
-    'Here you go: {"summary": "S.", "mitigation": "M."} hope that helps',
+    "Acme patched a VPN flaw. Attackers used it.\nFix: Update to 2.1.",
+    "Summary: Acme patched a VPN flaw. Attackers used it.\n\nFix: Update to 2.1.",
+    "**Summary:** Acme patched a VPN flaw.\nAttackers used it.\n**Fix:** Update to 2.1.",
+    "<think>The user wants a summary. Let me read it.</think>\nAcme patched a VPN flaw. Attackers used it.\nFix: Update to 2.1.",
+    "```\nAcme patched a VPN flaw. Attackers used it.\nFix: Update to 2.1.\n```",
+    '{"summary": "Acme patched a VPN flaw. Attackers used it.", "mitigation": "Update to 2.1."}',  # JSON still works
 ])
-def test_parse_summary_tolerant(raw):
-    assert parse_summary(raw) == ("S.", "M.")
+def test_parse_plain_text_summary(raw):
+    assert parse_summary(raw) == ("Acme patched a VPN flaw. Attackers used it.", "Update to 2.1.")
 
 
-def test_parse_summary_null_mitigation():
-    assert parse_summary('{"summary": "S.", "mitigation": null}') == ("S.", None)
+def test_summary_without_fix_line():
+    assert parse_summary("Researchers found a botnet. It targets routers.") == (
+        "Researchers found a botnet. It targets routers.", None)
+
+
+@pytest.mark.parametrize("raw", ["", "   ", "<think>still thinking when the budget ran out", "```\n```"])
+def test_empty_reply_is_rejected(raw):
+    with pytest.raises(InvalidOutput):
+        parse_summary(raw)
+
+
+def test_long_summary_is_clipped_at_a_sentence():
+    summary, _ = parse_summary("This is one sentence of the summary. " * 60)
+    assert len(summary) <= 900 and summary.endswith(".")
+
+
+def test_parse_weekly_labels():
+    raw = ("What happened: Acme was breached.\nWho is affected: 77 million customers.\n"
+           "What changed: Acme reset passwords.\nFix: Change your password.")
+    assert parse_weekly(raw) == {"what_happened": "Acme was breached.", "who_affected": "77 million customers.",
+                                 "what_changed": "Acme reset passwords.", "mitigation": "Change your password."}
+
+
+def test_parse_weekly_unlabeled_and_partial():
+    assert parse_weekly("Acme was breached. Data leaked.\n**Fix:** Reset passwords.") == {
+        "what_happened": "Acme was breached. Data leaked.", "who_affected": None, "what_changed": None,
+        "mitigation": "Reset passwords."}
 
 
 def test_three_attempts_then_left_out(cfg):
-    client = ScriptedClient("garbage")
+    client = ScriptedClient("")
     s = Summarizer(client, cfg.ai)
     assert s.summarize(story()) is None  # no excerpt: the story is left out
     assert client.calls == ATTEMPTS == 3 and s.stats.failed == 1
 
 
 def test_third_attempt_succeeds(cfg):
-    client = ScriptedClient("not json", TransientAIError("502"), '{"summary": "Northwind fixed it.", "mitigation": "Upgrade."}')
+    client = ScriptedClient("", TransientAIError("502"), "Northwind fixed it.\nFix: Upgrade.")
     s = Summarizer(client, cfg.ai)
     out = s.summarize(story())
     assert out.summary == "Northwind fixed it." and out.mitigation == "Upgrade." and s.stats.valid_retry == 1
@@ -211,6 +240,20 @@ def test_auth_error_explains_itself(cfg):
         client.complete("s", "u")
 
 
+def test_empty_content_is_a_retryable_error(cfg):
+    body = {"choices": [{"message": {"content": "", "reasoning": "long thoughts"}, "finish_reason": "length"}]}
+    client = OpenRouterClient(api_key="sk-or-test-000000", model="m", cfg=cfg.ai, session=FakeHTTP(200, body))
+    with pytest.raises(TransientAIError, match="finish_reason=length"):
+        client.complete("s", "u")
+
+
+def test_whole_article_is_sent(cfg):
+    from malnews.summarize import build_user_message
+
+    text = "word " * 3500  # 17,500 characters: more than the old 6,000-character cut-off
+    assert text.strip() in build_user_message("T", text.strip(), cfg.ai.max_input_chars)
+
+
 def test_openrouter_request(cfg):
     http = FakeHTTP(200, {"choices": [{"message": {"content": "hi"}}]})
     client = OpenRouterClient(api_key="sk-or-test-000000", model="m", cfg=cfg.ai, session=http)
@@ -225,8 +268,8 @@ def test_weekly_none_when_unusable(cfg):
 
     rec = StoryRecord(id="https://x.com/a", day=NOW.date(), title="T", score=0.5, text="Body.",
                       links=[LinkRecord(publisher="P", url="https://x.com/a")])
-    assert Summarizer(ScriptedClient("nope"), cfg.ai).weekly(rec) is None
-    good = '{"what_happened": "It happened.", "who_affected": null, "what_changed": "n/a", "mitigation": "Patch."}'
+    assert Summarizer(ScriptedClient(""), cfg.ai).weekly(rec) is None
+    good = "What happened: It happened.\nWhat changed: n/a\nFix: Patch."
     content = Summarizer(ScriptedClient(good), cfg.ai).weekly(rec)
     assert (content.what_happened, content.who_affected, content.what_changed, content.mitigation) == (
         "It happened.", None, None, "Patch.")

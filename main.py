@@ -160,10 +160,10 @@ def run(max_requests: int | None, out_dir: Path, state_path: Path) -> int:
         f"- Story of the Week: {outcome.status}" + (f" ({sotw.story.title[:80]})" if sotw else "")
         + ("" if not sotw or usable(sotw.content) else "; no AI write-up yet, box hidden today"),
         f"- Model: {model}; requests used: {st.requests}",
-        f"- Valid JSON: {st.valid_first} first try, {st.valid_retry} after retry, "
+        f"- AI summaries: {st.valid_first} first try, {st.valid_retry} after retry, "
         f"{st.failed} left out (no usable summary), {st.flagged} left out (moderation), "
         f"{st.skipped} left out (request cap)"
-        + (f" ({rate:.0%} valid)" if rate is not None else ""),
+        + (f" ({rate:.0%} usable)" if rate is not None else ""),
         f"- Words: {edition.words}; PDF: {len(result.pdf) / 1024:.0f} KB",
     ])
     return 0
